@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -45,26 +46,5 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
         ];
-    }
-
-    // app/Models/User.php
-    public function config()
-    {
-        return $this->hasOne(UserConfig::class);
-    }
-
-    public function accounts()
-    {
-        return $this->hasMany(Account::class);
-    }
-
-    public function categories()
-    {
-        return $this->hasMany(Category::class);
-    }
-
-    public function investPegadaianGold()
-    {
-        return $this->hasOne(InvestPegadaianGold::class);
     }
 }
