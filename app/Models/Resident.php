@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +10,7 @@ class Resident extends Model
     /** @use HasFactory<\Database\Factories\ResidenFactory> */
     use HasFactory;
 
-    protected $table = 'residents';
+    protected $table   = 'residents';
     protected $guarded = [];
 
     /**
@@ -20,6 +19,14 @@ class Resident extends Model
     public function region(): BelongsTo
     {
         return $this->belongsTo(Region::class);
+    }
+
+    /**
+     * Get the houses for the resident.
+     */
+    public function houses()
+    {
+        return $this->hasMany(ResidentHouse::class);
     }
 
     /**
