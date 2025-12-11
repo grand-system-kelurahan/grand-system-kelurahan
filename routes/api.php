@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ResidentController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\FamilyCardController;
 use App\Http\Controllers\RegionController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,9 +15,9 @@ Route::post('/register', [LoginController::class, 'register']);
 Route::post('/login', [LoginController::class, 'login']);
 
 
-Route::apiResource('residents', ResidentController::class);
-
 Route::apiResource('regions', RegionController::class);
+Route::apiResource('residents', ResidentController::class);
+Route::apiResource('family-cards', FamilyCardController::class);
 
 // Route::get('/residents/statistics', [ResidentController::class, 'statistics']);
 // Route::get('/residents/area', [ResidentController::class, 'getByArea']);
