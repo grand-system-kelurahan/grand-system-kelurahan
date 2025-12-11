@@ -1,8 +1,10 @@
 <?php
 
-use App\Http\Controllers\ResidentController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\PointOfInterestController;
 use App\Http\Controllers\RegionController;
+use App\Http\Controllers\ResidentController;
+use App\Http\Controllers\ResidentHouseController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -13,12 +15,19 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::post('/register', [LoginController::class, 'register']);
 Route::post('/login', [LoginController::class, 'login']);
 
+Route::middleware('auth:sanctum')->group(function () {
+    // Masukin route ke sini kalau udah ditest
+});
 
+// Sementara di luar middleware auth:sanctum biar gampang testingnya
 Route::apiResource('residents', ResidentController::class);
-
-Route::apiResource('regions', RegionController::class);
 
 // Route::get('/residents/statistics', [ResidentController::class, 'statistics']);
 // Route::get('/residents/area', [ResidentController::class, 'getByArea']);
 // Route::get('/residents/search', [ResidentController::class, 'search']);
 // Route::post('/residents/bulk-delete', [ResidentController::class, 'bulkDelete']);
+
+// GIS Resources
+Route::apiResource('regions', RegionController::class);
+Route::apiResource('points-of-interest', PointOfInterestController::class);
+Route::apiResource('resident-houses', ResidentHouseController::class);
