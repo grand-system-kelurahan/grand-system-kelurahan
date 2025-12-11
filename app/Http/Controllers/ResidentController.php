@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreResidentRequest;
 use App\Http\Requests\UpdateResidentRequest;
+use App\Models\Region;
 use App\Models\Resident;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,7 @@ class ResidentController extends Controller
         try {
             $query = Resident::with('region');
 
-            // Filtering
+
             if ($request->has('search') && $request->search != '') {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
@@ -44,18 +45,18 @@ class ResidentController extends Controller
                 $query->where('gender', $request->gender);
             }
 
-            // Sorting
+
             $sortField = $request->get('sort_by', 'created_at');
             $sortDirection = $request->get('sort_dir', 'desc');
             $query->orderBy($sortField, $sortDirection);
 
-            // Pagination
+
             $perPage = $request->get('per_page', 20);
             $residents = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data residents berhasil diambil',
+                'message' => 'Data fetched successfully',
                 'data' => [
                     'residents' => $residents->items(),
                     'meta' => [
@@ -77,7 +78,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan server',
+                'message' => 'Failed to fetch data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -91,7 +92,16 @@ class ResidentController extends Controller
         try {
             $data = $request->validated();
 
-            // Format tanggal
+            $regionId = $data['region_id'];
+            $region = Region::find($regionId);
+
+            if (!$region) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Region with id ' . $regionId . ' not found',
+                ], 404);
+            }
+
             if (isset($data['date_of_birth'])) {
                 $data['date_of_birth'] = date('Y-m-d', strtotime($data['date_of_birth']));
             }
@@ -100,7 +110,7 @@ class ResidentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data resident berhasil dibuat',
+                'message' => 'Data created successfully',
                 'data' => [
                     'resident' => $resident->load('region')
                 ]
@@ -108,7 +118,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal membuat data resident',
+                'message' => 'Failed to create data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -122,7 +132,7 @@ class ResidentController extends Controller
         try {
             return response()->json([
                 'success' => true,
-                'message' => 'Detail data resident',
+                'message' => 'Data fetched successfully',
                 'data' => [
                     'resident' => $resident->load('region')
                 ]
@@ -130,7 +140,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil data resident',
+                'message' => 'Failed to fetch data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -144,7 +154,16 @@ class ResidentController extends Controller
         try {
             $data = $request->validated();
 
-            // Format tanggal jika ada
+            $regionId = $data['region_id'];
+            $region = Region::find($regionId);
+
+            if (!$region) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Region with id ' . $regionId . ' not found',
+                ], 404);
+            }
+
             if (isset($data['date_of_birth'])) {
                 $data['date_of_birth'] = date('Y-m-d', strtotime($data['date_of_birth']));
             }
@@ -153,7 +172,7 @@ class ResidentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data resident berhasil diperbarui',
+                'message' => 'Data updated successfully',
                 'data' => [
                     'resident' => $resident->fresh()->load('region')
                 ]
@@ -161,7 +180,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal memperbarui data resident',
+                'message' => 'Failed to update data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -177,13 +196,13 @@ class ResidentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data resident berhasil dihapus',
+                'message' => 'Data deleted successfully',
                 'data' => null
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus data resident',
+                'message' => 'Failed to delete data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -220,7 +239,6 @@ class ResidentController extends Controller
                     return [$item->education => $item->total];
                 });
 
-            // Age distribution
             $ageDistribution = [
                 '0-17' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 0 AND 17')->count(),
                 '18-30' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 18 AND 30')->count(),
@@ -253,7 +271,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil statistik',
+                'message' => 'Failed to get statistics',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -289,7 +307,7 @@ class ResidentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data residents berdasarkan area',
+                'message' => 'Data fetched successfully',
                 'data' => [
                     'residents' => $residents,
                     'summary' => [
@@ -303,7 +321,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil data',
+                'message' => 'Failed to fetch data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -333,7 +351,7 @@ class ResidentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Hasil pencarian',
+                'message' => 'Data fetched successfully',
                 'data' => [
                     'residents' => $residents,
                     'total_found' => $residents->count()
@@ -342,7 +360,7 @@ class ResidentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal melakukan pencarian',
+                'message' => 'Failed to fetch data',
                 'error' => $e->getMessage()
             ], 500);
         }

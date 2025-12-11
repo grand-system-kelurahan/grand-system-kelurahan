@@ -19,24 +19,24 @@ class RegionController extends Controller
         try {
             $query = Region::withCount('residents');
 
-            // Filtering
+
             if ($request->has('search') && $request->search != '') {
                 $search = $request->search;
                 $query->where('name', 'like', "%{$search}%");
             }
 
-            // Sorting
+
             $sortField = $request->get('sort_by', 'created_at');
             $sortDirection = $request->get('sort_dir', 'desc');
             $query->orderBy($sortField, $sortDirection);
 
-            // Pagination
+
             $perPage = $request->get('per_page', 20);
             $regions = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data regions berhasil diambil',
+                'message' => 'Data fetched successfully',
                 'data' => [
                     'regions' => $regions->items(),
                     'meta' => [
@@ -58,7 +58,7 @@ class RegionController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan server',
+                'message' => 'Failed to fetch data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -76,7 +76,7 @@ class RegionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data region berhasil dibuat',
+                'message' => 'Data created successfully',
                 'data' => [
                     'region' => $region
                 ]
@@ -84,7 +84,7 @@ class RegionController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal membuat data region',
+                'message' => 'Failed to create data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -100,7 +100,7 @@ class RegionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Detail data region',
+                'message' => 'Data fetched successfully',
                 'data' => [
                     'region' => $region,
                     'residents_count' => $region->residents_count,
@@ -110,7 +110,7 @@ class RegionController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil data region',
+                'message' => 'Failed to fetch data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -128,7 +128,7 @@ class RegionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data region berhasil diperbarui',
+                'message' => 'Data updated successfully',
                 'data' => [
                     'region' => $region->fresh()
                 ]
@@ -136,7 +136,7 @@ class RegionController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal memperbarui data region',
+                'message' => 'Failed to update data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -148,11 +148,11 @@ class RegionController extends Controller
     public function destroy(Region $region): JsonResponse
     {
         try {
-            // Check if region has residents
+
             if ($region->residents()->count() > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Tidak dapat menghapus region yang memiliki data warga',
+                    'message' => 'Cannot delete region that has residents data',
                     'data' => [
                         'residents_count' => $region->residents()->count()
                     ]
@@ -163,13 +163,13 @@ class RegionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data region berhasil dihapus',
+                'message' => 'Data deleted successfully',
                 'data' => null
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus data region',
+                'message' => 'Failed to delete data',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -209,7 +209,7 @@ class RegionController extends Controller
         try {
             $query = $region->residents();
 
-            // Filtering
+
             if ($request->has('gender')) {
                 $query->where('gender', $request->gender);
             }
@@ -222,12 +222,12 @@ class RegionController extends Controller
                 $query->where('rw', $request->rw);
             }
 
-            // Sorting
+
             $sortField = $request->get('sort_by', 'name');
             $sortDirection = $request->get('sort_dir', 'asc');
             $query->orderBy($sortField, $sortDirection);
 
-            // Pagination
+
             $perPage = $request->get('per_page', 20);
             $residents = $query->paginate($perPage);
 
@@ -326,7 +326,7 @@ class RegionController extends Controller
                 'ids.*' => 'exists:regions,id'
             ]);
 
-            // Check if any region has residents
+
             $regionsWithResidents = Region::whereIn('id', $request->ids)
                 ->has('residents')
                 ->count();

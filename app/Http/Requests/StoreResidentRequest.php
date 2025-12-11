@@ -22,9 +22,9 @@ class StoreResidentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'national_number_id' => 'required|string|unique:residents',
+            'national_number_id' => 'required|string',
             'name' => 'required|string',
-            'gender' => 'required|enum:Laki-laki,Perempuan',
+            'gender' => 'required|string',
             'place_of_birth' => 'required|string',
             'date_of_birth' => 'required|date',
             'religion' => 'required|string',
@@ -38,7 +38,7 @@ class StoreResidentRequest extends FormRequest
             'disabilities' => 'required|string',
             'father_name' => 'required|string',
             'mother_name' => 'required|string',
-            'region_id' => 'required|numeric|exists:regions,id',
+            'region_id' => 'required|numeric',
         ];
     }
 }
