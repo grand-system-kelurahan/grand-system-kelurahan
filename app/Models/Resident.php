@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,9 +14,7 @@ class Resident extends Model
     protected $table   = 'residents';
     protected $guarded = [];
 
-    /**
-     * Get the region that owns the resident.
-     */
+
     public function region(): BelongsTo
     {
         return $this->belongsTo(Region::class);
@@ -32,6 +31,12 @@ class Resident extends Model
     /**
      * Get the age of resident.
      */
+    public function familyMember(): BelongsTo
+    {
+        return $this->belongsTo(FamilyMember::class);
+    }
+
+
     public function getAgeAttribute(): int
     {
         return now()->diffInYears($this->date_of_birth);

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\PointOfInterestController;
+use App\Http\Controllers\FamilyCardController;
 use App\Http\Controllers\RegionController;
 use App\Http\Controllers\ResidentController;
 use App\Http\Controllers\ResidentHouseController;
@@ -21,6 +22,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Sementara di luar middleware auth:sanctum biar gampang testingnya
 Route::apiResource('residents', ResidentController::class);
+Route::apiResource('regions', RegionController::class);
+Route::apiResource('residents', ResidentController::class);
+Route::apiResource('family-cards', FamilyCardController::class);
 
 // Route::get('/residents/statistics', [ResidentController::class, 'statistics']);
 // Route::get('/residents/area', [ResidentController::class, 'getByArea']);
@@ -31,3 +35,4 @@ Route::apiResource('residents', ResidentController::class);
 Route::apiResource('regions', RegionController::class);
 Route::apiResource('points-of-interest', PointOfInterestController::class);
 Route::apiResource('resident-houses', ResidentHouseController::class);
+// Route::post('/residents/bulk-delete', [ResidentController::class, 'bulkDelete']);

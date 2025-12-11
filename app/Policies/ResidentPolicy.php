@@ -2,11 +2,11 @@
 
 namespace App\Policies;
 
-use App\Models\Residen;
+use App\Models\Resident;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
-class ResidenPolicy
+class ResidentPolicy
 {
     /**
      * Determine whether the user can view any models.
@@ -19,7 +19,7 @@ class ResidenPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, Residen $residen): bool
+    public function view(User $user, Resident $resident): bool
     {
         return false;
     }
@@ -35,7 +35,7 @@ class ResidenPolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, Residen $residen): bool
+    public function update(User $user, Resident $resident): bool
     {
         return false;
     }
@@ -43,7 +43,7 @@ class ResidenPolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, Residen $residen): bool
+    public function delete(User $user, Resident $resident): bool
     {
         return false;
     }
@@ -51,7 +51,7 @@ class ResidenPolicy
     /**
      * Determine whether the user can restore the model.
      */
-    public function restore(User $user, Residen $residen): bool
+    public function restore(User $user, Resident $resident): bool
     {
         return false;
     }
@@ -59,7 +59,7 @@ class ResidenPolicy
     /**
      * Determine whether the user can permanently delete the model.
      */
-    public function forceDelete(User $user, Residen $residen): bool
+    public function forceDelete(User $user, Resident $resident): bool
     {
         return false;
     }

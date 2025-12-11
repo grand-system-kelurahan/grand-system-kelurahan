@@ -11,7 +11,7 @@ class StoreFamilyCardRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,7 +22,10 @@ class StoreFamilyCardRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'head_of_family_name' => 'required|string',
+            'address' => 'required|string',
+            'publication_date' => 'required|date',
+            'region_id' => 'required|numeric',
         ];
     }
 }

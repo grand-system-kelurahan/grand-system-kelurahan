@@ -11,7 +11,7 @@ class UpdateFamilyCardRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,7 +22,10 @@ class UpdateFamilyCardRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'head_of_family_name' => 'nullable|string',
+            'address' => 'nullable|string',
+            'publication_date' => 'nullable|date',
+            'region_id' => 'nullable|numeric',
         ];
     }
 }
