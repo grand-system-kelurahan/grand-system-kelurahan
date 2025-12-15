@@ -9,6 +9,7 @@ use App\Models\Region;
 use App\Models\Resident;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class ResidentController extends Controller
 {
@@ -18,7 +19,7 @@ class ResidentController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Resident::with('region');
+            $query = Resident::with(['region', 'familyMember']);
 
 
             if ($request->has('search') && $request->search != '') {
@@ -54,10 +55,9 @@ class ResidentController extends Controller
             $perPage = $request->get('per_page', 20);
             $residents = $query->paginate($perPage);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'residents' => $residents->items(),
                     'meta' => [
                         'current_page' => $residents->currentPage(),
@@ -74,13 +74,13 @@ class ResidentController extends Controller
                         'next' => $residents->nextPageUrl(),
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -108,19 +108,19 @@ class ResidentController extends Controller
 
             $resident = Resident::create($data);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data created successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data created successfully',
+                [
                     'resident' => $resident->load('region')
-                ]
-            ], 201);
+                ],
+                201
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to create data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -130,19 +130,18 @@ class ResidentController extends Controller
     public function show(Resident $resident): JsonResponse
     {
         try {
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'resident' => $resident->load('region')
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -170,19 +169,18 @@ class ResidentController extends Controller
 
             $resident->update($data);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data updated successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data updated successfully',
+                [
                     'resident' => $resident->fresh()->load('region')
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to update data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -193,18 +191,16 @@ class ResidentController extends Controller
     {
         try {
             $resident->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Data deleted successfully',
-                'data' => null
-            ], 200);
+            return ApiResponse::success(
+                'Data deleted successfully',
+                null
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to delete data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -247,10 +243,9 @@ class ResidentController extends Controller
                 '60+' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) > 60')->count(),
             ];
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Statistik residents',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'total' => $total,
                     'gender_distribution' => [
                         'male' => $male,
@@ -267,13 +262,13 @@ class ResidentController extends Controller
                         'total_rw' => Resident::distinct('rw')->count('rw'),
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to get statistics',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to get statistics',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -305,10 +300,9 @@ class ResidentController extends Controller
 
             $residents = $query->get();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'residents' => $residents,
                     'summary' => [
                         'total' => $residents->count(),
@@ -317,13 +311,13 @@ class ResidentController extends Controller
                         'region' => $residents->first()->region ?? null
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -349,20 +343,19 @@ class ResidentController extends Controller
                 ->limit(20)
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'residents' => $residents,
                     'total_found' => $residents->count()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 }

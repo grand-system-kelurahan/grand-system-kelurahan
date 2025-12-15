@@ -7,9 +7,11 @@ use App\Http\Requests\StoreFamilyMemberRequest;
 use App\Http\Requests\UpdateFamilyMemberRequest;
 use App\Models\FamilyMember;
 use App\Models\FamilyCard;
+use App\Models\Resident;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class FamilyMemberController extends Controller
 {
@@ -57,10 +59,9 @@ class FamilyMemberController extends Controller
             $perPage = $request->get('per_page', 20);
             $familyMembers = $query->paginate($perPage);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data anggota keluarga berhasil diambil',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'family_members' => $familyMembers->items(),
                     'meta' => [
                         'current_page' => $familyMembers->currentPage(),
@@ -71,57 +72,80 @@ class FamilyMemberController extends Controller
                         'to' => $familyMembers->lastItem(),
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan server',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreFamilyMemberRequest $request): JsonResponse
+    public function store(StoreFamilyMemberRequest $request, FamilyCard $familyCard): JsonResponse
     {
         DB::beginTransaction();
 
         try {
             $data = $request->validated();
 
+
+            // Tambahkan family_card_id dari route parameter
+            $data['family_card_id'] = $familyCard->id;
+
             // Cek apakah resident sudah menjadi anggota keluarga lain
             $existingMember = FamilyMember::where('resident_id', $data['resident_id'])->first();
             if ($existingMember) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Warga ini sudah menjadi anggota keluarga lain',
-                    'data' => [
-                        'existing_family_card_id' => $existingMember->family_card_id
-                    ]
-                ], 422);
+                return ApiResponse::success(
+                    'This resident is already a member of another family card',
+                    [
+                        'existing_family_card_id' => $existingMember->family_card_id,
+                        'existing_family_head' => $existingMember->familyCard->head_of_family_name
+                    ],
+                    422
+                );
+            }
+
+            // Validasi tambahan: cek apakah resident sudah ada di keluarga yang sama
+            $alreadyInThisFamily = FamilyMember::where('family_card_id', $familyCard->id)
+                ->where('resident_id', $data['resident_id'])
+                ->exists();
+
+            if ($alreadyInThisFamily) {
+                return ApiResponse::success(
+                    'This resident is already a member of this family card',
+                    null,
+                    422
+                );
             }
 
             $familyMember = FamilyMember::create($data);
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga berhasil ditambahkan',
-                'data' => [
-                    'family_member' => $familyMember->load(['familyCard', 'resident'])
-                ]
-            ], 201);
+            return ApiResponse::success(
+                'Family member created successfully',
+                [
+                    'family_member' => $familyMember->load(['familyCard', 'resident']),
+                    'family_card_info' => [
+                        'id' => $familyCard->id,
+                        'head_of_family' => $familyCard->head_of_family_name,
+                        'total_members' => $familyCard->familyMembers()->count()
+                    ]
+                ],
+                201
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menambahkan anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to create family member',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -133,10 +157,9 @@ class FamilyMemberController extends Controller
         try {
             $familyMember->load(['familyCard.region', 'resident.region']);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Detail anggota keluarga',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'family_member' => $familyMember,
                     'family_info' => [
                         'total_members_in_family' => $familyMember->familyCard->familyMembers()->count(),
@@ -148,99 +171,212 @@ class FamilyMemberController extends Controller
                         'gender' => $familyMember->resident->gender,
                         'occupation' => $familyMember->resident->occupation
                     ]
-                ]
-            ], 200);
+                ],
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil data anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateFamilyMemberRequest $request, FamilyMember $familyMember): JsonResponse
+    public function update(UpdateFamilyMemberRequest $request, FamilyCard $familyCard, FamilyMember $familyMember): JsonResponse
     {
         DB::beginTransaction();
 
         try {
+            // Validasi 1: Pastikan family member milik family card yang benar
+            if ($familyMember->family_card_id != $familyCard->id) {
+                return ApiResponse::success(
+                    'Family member not found in this family card',
+                    [
+                        'requested_family_card_id' => $familyCard->id,
+                        'member_family_card_id' => $familyMember->family_card_id
+                    ],
+                    404
+                );
+            }
+
             $data = $request->validated();
 
-            // Jika mengubah resident_id, cek apakah resident baru sudah menjadi anggota keluarga lain
-            if (isset($data['resident_id']) && $data['resident_id'] != $familyMember->resident_id) {
-                $existingMember = FamilyMember::where('resident_id', $data['resident_id'])->first();
-                if ($existingMember && $existingMember->id != $familyMember->id) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Warga ini sudah menjadi anggota keluarga lain',
-                        'data' => [
-                            'existing_family_card_id' => $existingMember->family_card_id
-                        ]
-                    ], 422);
+            // Validasi 2: Jika mengubah relationship menjadi "Kepala Keluarga"
+            if (isset($data['relationship']) && strtolower($data['relationship']) === 'kepala keluarga') {
+                // Cek apakah sudah ada kepala keluarga lain di keluarga ini
+                $existingHead = FamilyMember::where('family_card_id', $familyCard->id)
+                    ->where('relationship', 'Kepala Keluarga')
+                    ->where('id', '!=', $familyMember->id)
+                    ->first();
+
+                if ($existingHead) {
+                    return ApiResponse::success(
+                        'There is already a head of family in this family card',
+                        [
+                            'current_head_of_family' => [
+                                'id' => $existingHead->id,
+                                'resident_name' => $existingHead->resident->name ?? 'Tidak diketahui',
+                                'resident_id' => $existingHead->resident_id
+                            ]
+                        ],
+                        422
+                    );
                 }
             }
 
+            // Validasi 3: Jika mengubah resident_id
+            if (isset($data['resident_id']) && $data['resident_id'] != $familyMember->resident_id) {
+                // Cek apakah resident baru ada
+                $newResident = Resident::find($data['resident_id']);
+                if (!$newResident) {
+                    return ApiResponse::success(
+                        'Resident not found',
+                        null,
+                        404
+                    );
+                }
+
+                // Cek apakah resident baru sudah menjadi anggota keluarga lain
+                $existingMember = FamilyMember::where('resident_id', $data['resident_id'])
+                    ->where('id', '!=', $familyMember->id)
+                    ->first();
+
+                if ($existingMember) {
+                    return ApiResponse::success(
+                        'Resident is already a member of another family card',
+                        [
+                            'existing_family_card' => [
+                                'id' => $existingMember->family_card_id,
+                                'head_of_family' => $existingMember->familyCard->head_of_family_name ?? 'Tidak diketahui'
+                            ]
+                        ],
+                        422
+                    );
+                }
+
+                // Cek apakah resident baru sudah ada di keluarga yang sama (jika pindah resident)
+                $alreadyInSameFamily = FamilyMember::where('family_card_id', $familyCard->id)
+                    ->where('resident_id', $data['resident_id'])
+                    ->where('id', '!=', $familyMember->id)
+                    ->exists();
+
+                if ($alreadyInSameFamily) {
+                    return ApiResponse::success(
+                        'Resident is already a member of this family card',
+                        null,
+                        422
+                    );
+                }
+            }
+
+            // Simpan data lama untuk logging/response
+            $oldData = [
+                'resident_id' => $familyMember->resident_id,
+                'resident_name' => $familyMember->resident->name ?? 'Tidak diketahui',
+                'relationship' => $familyMember->relationship,
+                'updated_at' => $familyMember->updated_at
+            ];
+
+            // Update data
             $familyMember->update($data);
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga berhasil diperbarui',
-                'data' => [
-                    'family_member' => $familyMember->fresh()->load(['familyCard', 'resident'])
-                ]
-            ], 200);
+            // Load data terbaru dengan relasi
+            $updatedMember = $familyMember->fresh()->load(['familyCard.region', 'resident.region']);
+
+            return ApiResponse::success(
+                'Family member updated successfully',
+                [
+                    'family_member' => $updatedMember,
+                    'changes' => [
+                        'old_data' => $oldData,
+                        'new_data' => [
+                            'resident_id' => $updatedMember->resident_id,
+                            'resident_name' => $updatedMember->resident->name ?? 'Tidak diketahui',
+                            'relationship' => $updatedMember->relationship
+                        ],
+                        'changed_fields' => array_keys($data)
+                    ],
+                    'family_info' => [
+                        'id' => $familyCard->id,
+                        'head_of_family' => $familyCard->head_of_family_name,
+                        'total_members' => $familyCard->familyMembers()->count(),
+                        'head_of_family_exists' => $familyCard->familyMembers()
+                            ->where('relationship', 'Kepala Keluarga')
+                            ->exists()
+                    ]
+                ],
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal memperbarui anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to update family member',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(FamilyMember $familyMember): JsonResponse
+    public function destroy(FamilyCard $familyCard, FamilyMember $familyMember): JsonResponse
     {
         DB::beginTransaction();
 
         try {
-            // Cek jika ini kepala keluarga
-            if ($familyMember->relationship === 'Kepala Keluarga') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Tidak dapat menghapus kepala keluarga'
-                ], 422);
+            // Validasi: pastikan familyMember benar-benar milik familyCard ini
+            if ($familyMember->family_card_id !== $familyCard->id) {
+                return ApiResponse::success(
+                    'Family member not found in this family card',
+                    [
+                        'requested_family_card_id' => $familyCard->id,
+                        'member_family_card_id' => $familyMember->family_card_id
+                    ],
+                    404
+                );
             }
 
-            $familyCardId = $familyMember->family_card_id;
+            // Simpan informasi sebelum menghapus untuk response
+            $deletedMemberInfo = [
+                'id' => $familyMember->id,
+                'resident_id' => $familyMember->resident_id,
+                'resident_name' => $familyMember->resident->name ?? 'Unknown',
+                'relationship' => $familyMember->relationship
+            ];
+
             $familyMember->delete();
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga berhasil dihapus',
-                'data' => [
-                    'remaining_members_count' => FamilyMember::where('family_card_id', $familyCardId)->count()
+            // Hitung ulang jumlah anggota
+            $remainingCount = FamilyMember::where('family_card_id', $familyCard->id)->count();
+
+            return ApiResponse::success(
+                'Family member deleted successfully',
+                [
+                    'deleted_member' => $deletedMemberInfo,
+                    'family_card_info' => [
+                        'id' => $familyCard->id,
+                        'head_of_family' => $familyCard->head_of_family_name,
+                        'remaining_members_count' => $remainingCount,
+                        'has_members' => $remainingCount > 0
+                    ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghapus anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to delete data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -281,21 +417,20 @@ class FamilyMemberController extends Controller
                 ]
             ];
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga dari ' . $familyCard->head_of_family_name,
-                'data' => [
+            return ApiResponse::success(
+                'Family members fetched successfully',
+                [
                     'family_card' => $familyCard->only(['id', 'head_of_family_name', 'address']),
                     'family_members' => $familyMembers,
                     'statistics' => $statistics
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -317,82 +452,19 @@ class FamilyMemberController extends Controller
                 ], 404);
             }
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data keluarga warga',
-                'data' => [
+            return ApiResponse::success(
+                'Family card fetched successfully',
+                [
                     'family_member' => $familyMember,
                     'family_members' => $familyMember->familyCard->familyMembers()->with('resident')->get()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil data keluarga',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Transfer family member to another family card
-     */
-    public function transfer(Request $request, FamilyMember $familyMember): JsonResponse
-    {
-        DB::beginTransaction();
-
-        try {
-            $request->validate([
-                'new_family_card_id' => 'required|exists:family_cards,id',
-                'new_relationship' => 'required|string|max:50'
-            ]);
-
-            // Cek jika ini kepala keluarga
-            if ($familyMember->relationship === 'Kepala Keluarga') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Tidak dapat mentransfer kepala keluarga'
-                ], 422);
-            }
-
-            // Cek apakah resident sudah menjadi anggota keluarga tujuan
-            $existingInNewFamily = FamilyMember::where('family_card_id', $request->new_family_card_id)
-                ->where('resident_id', $familyMember->resident_id)
-                ->exists();
-
-            if ($existingInNewFamily) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Warga ini sudah menjadi anggota keluarga tujuan'
-                ], 422);
-            }
-
-            $oldFamilyCardId = $familyMember->family_card_id;
-
-            $familyMember->update([
-                'family_card_id' => $request->new_family_card_id,
-                'relationship' => $request->new_relationship
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga berhasil ditransfer',
-                'data' => [
-                    'family_member' => $familyMember->fresh()->load(['familyCard', 'resident']),
-                    'old_family_members_count' => FamilyMember::where('family_card_id', $oldFamilyCardId)->count(),
-                    'new_family_members_count' => FamilyMember::where('family_card_id', $request->new_family_card_id)->count()
-                ]
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mentransfer anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -411,10 +483,9 @@ class FamilyMemberController extends Controller
 
             $uniqueFamilies = FamilyMember::distinct('family_card_id')->count('family_card_id');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Statistik hubungan keluarga',
-                'data' => [
+            return ApiResponse::success(
+                'Family relationship statistics fetched successfully',
+                [
                     'total_family_members' => $totalMembers,
                     'unique_families' => $uniqueFamilies,
                     'relationship_distribution' => $relationshipStats,
@@ -422,13 +493,13 @@ class FamilyMemberController extends Controller
                     'most_common_relationship' => $relationshipStats->first()->relationship ?? 'Tidak ada data',
                     'most_common_relationship_count' => $relationshipStats->first()->total ?? 0
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil statistik',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 }

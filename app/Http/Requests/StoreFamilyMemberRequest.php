@@ -11,7 +11,7 @@ class StoreFamilyMemberRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,7 +22,8 @@ class StoreFamilyMemberRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'resident_id'       => 'required|numeric|exists:residents,id',
+            'relationship'      => 'required|string',
         ];
     }
 }

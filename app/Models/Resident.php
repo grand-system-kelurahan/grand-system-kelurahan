@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Resident extends Model
 {
@@ -31,9 +32,9 @@ class Resident extends Model
     /**
      * Get the age of resident.
      */
-    public function familyMember(): BelongsTo
+    public function familyMember(): HasOne
     {
-        return $this->belongsTo(FamilyMember::class);
+        return $this->hasOne(FamilyMember::class, 'resident_id');
     }
 
 

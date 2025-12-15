@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateRegionRequest;
 use App\Models\Region;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class RegionController extends Controller
 {
@@ -34,10 +35,9 @@ class RegionController extends Controller
             $perPage = $request->get('per_page', 20);
             $regions = $query->paginate($perPage);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'regions' => $regions->items(),
                     'meta' => [
                         'current_page' => $regions->currentPage(),
@@ -54,13 +54,13 @@ class RegionController extends Controller
                         'next' => $regions->nextPageUrl(),
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -74,19 +74,19 @@ class RegionController extends Controller
 
             $region = Region::create($data);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data created successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data created successfully',
+                [
                     'region' => $region
-                ]
-            ], 201);
+                ],
+                201
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to create data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -97,22 +97,20 @@ class RegionController extends Controller
     {
         try {
             $region->loadCount('residents');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'region' => $region,
                     'residents_count' => $region->residents_count,
                     'statistics' => $this->getRegionStatistics($region)
-                ]
-            ], 200);
+                ],
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -125,20 +123,18 @@ class RegionController extends Controller
             $data = $request->validated();
 
             $region->update($data);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Data updated successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data updated successfully',
+                [
                     'region' => $region->fresh()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to update data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -150,28 +146,27 @@ class RegionController extends Controller
         try {
 
             if ($region->residents()->count() > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete region that has residents data',
-                    'data' => [
+                return ApiResponse::success(
+                    'Cannot delete region that has residents data',
+                    [
                         'residents_count' => $region->residents()->count()
-                    ]
-                ], 422);
+                    ],
+                    422
+                );
             }
 
             $region->delete();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data deleted successfully',
-                'data' => null
-            ], 200);
+            return ApiResponse::success(
+                'Data deleted successfully',
+                null,
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to delete data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -231,10 +226,9 @@ class RegionController extends Controller
             $perPage = $request->get('per_page', 20);
             $residents = $query->paginate($perPage);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data warga di region ' . $region->name,
-                'data' => [
+            return ApiResponse::success(
+                'Resident in region ' . $region->name,
+                [
                     'region' => $region->only(['id', 'name']),
                     'residents' => $residents->items(),
                     'meta' => [
@@ -243,14 +237,14 @@ class RegionController extends Controller
                         'per_page' => $residents->perPage(),
                         'total' => $residents->total(),
                     ]
-                ]
-            ], 200);
+                ],
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil data warga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -271,20 +265,19 @@ class RegionController extends Controller
                 ->limit(15)
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Hasil pencarian regions',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'regions' => $regions,
                     'total_found' => $regions->count()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal melakukan pencarian',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -298,20 +291,19 @@ class RegionController extends Controller
                 ->select('id', 'name', 'encoded_geometry')
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data regions dengan geometry',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'regions' => $regions,
                     'total_with_geometry' => $regions->count()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil data geometry',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -343,19 +335,18 @@ class RegionController extends Controller
 
             $count = Region::whereIn('id', $request->ids)->delete();
 
-            return response()->json([
-                'success' => true,
-                'message' => "{$count} data regions berhasil dihapus",
-                'data' => [
+            return ApiResponse::success(
+                "{$count} data regions deleted successfully",
+                [
                     'deleted_count' => $count
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghapus data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to delete data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -374,10 +365,9 @@ class RegionController extends Controller
                 ->limit(10)
                 ->get(['id', 'name', 'residents_count']);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Statistik regions',
-                'data' => [
+            return ApiResponse::success(
+                "Region statistics",
+                [
                     'total_regions' => $totalRegions,
                     'regions_with_geometry' => $regionsWithGeometry,
                     'regions_with_residents' => $regionsWithResidents,
@@ -390,13 +380,13 @@ class RegionController extends Controller
                         ? round(($regionsWithResidents / $totalRegions) * 100, 2)
                         : 0,
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil statistik',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 }

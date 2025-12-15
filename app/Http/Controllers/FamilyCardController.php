@@ -12,6 +12,7 @@ use App\Models\Resident;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class FamilyCardController extends Controller
 {
@@ -62,10 +63,9 @@ class FamilyCardController extends Controller
                 return $familyCard;
             });
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'family_cards' => $familyCards->items(),
                     'meta' => [
                         'current_page' => $familyCards->currentPage(),
@@ -76,13 +76,13 @@ class FamilyCardController extends Controller
                         'to' => $familyCards->lastItem(),
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -114,21 +114,20 @@ class FamilyCardController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data created successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data created successfully',
+                [
                     'family_card' => $familyCard->load('region')
                 ]
-            ], 201);
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to create data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -144,10 +143,9 @@ class FamilyCardController extends Controller
             $membersByGender = $this->getMembersByGender($familyCard);
             $membersByAge = $this->getMembersByAge($familyCard);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'family_card' => $familyCard,
                     'statistics' => [
                         'total_members' => $totalMembers,
@@ -156,13 +154,13 @@ class FamilyCardController extends Controller
                         'members_by_relationship' => $familyCard->familyMembers->groupBy('relationship')->map->count(),
                     ]
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -194,21 +192,20 @@ class FamilyCardController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data updated successfully',
-                'data' => [
+            return ApiResponse::success(
+                'Data updated successfully',
+                [
                     'family_card' => $familyCard->fresh()->load('region')
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to update data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -235,19 +232,18 @@ class FamilyCardController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Data deleted successfully',
-                'data' => null
-            ], 200);
+            return ApiResponse::success(
+                'Data deleted successfully',
+                null
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete data',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to delete data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -274,10 +270,9 @@ class FamilyCardController extends Controller
                 ->limit(5)
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Statistik kartu keluarga',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'total_family_cards' => $totalFamilyCards,
                     'total_family_members' => $totalMembers,
                     'average_members_per_family' => $averageMembers,
@@ -285,13 +280,13 @@ class FamilyCardController extends Controller
                     'latest_cards' => $latestCards,
                     'yearly_distribution' => $this->getYearlyDistribution()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil statistik',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to fetch statistics',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -311,14 +306,15 @@ class FamilyCardController extends Controller
             // Cek apakah resident sudah menjadi anggota keluarga lain
             $existingMember = FamilyMember::where('resident_id', $request->resident_id)->first();
             if ($existingMember) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Warga ini sudah menjadi anggota keluarga lain',
-                    'data' => [
+                return ApiResponse::error(
+                    'This resident is already a member of another family card',
+                    [
                         'existing_family_card_id' => $existingMember->family_card_id
-                    ]
-                ], 422);
+                    ],
+                    422
+                );
             }
+
 
             $familyMember = $familyCard->familyMembers()->create([
                 'resident_id' => $request->resident_id,
@@ -327,66 +323,21 @@ class FamilyCardController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga berhasil ditambahkan',
-                'data' => [
+            return ApiResponse::success(
+                'Data created successfully',
+                [
                     'family_member' => $familyMember->load('resident')
-                ]
-            ], 201);
+                ],
+                201
+            );
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menambahkan anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Remove member from family card
-     */
-    public function removeMember(FamilyCard $familyCard, $memberId): JsonResponse
-    {
-        DB::beginTransaction();
-
-        try {
-            $familyMember = $familyCard->familyMembers()->find($memberId);
-
-            if (!$familyMember) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anggota keluarga tidak ditemukan'
-                ], 404);
-            }
-
-            // Cek jika ini kepala keluarga
-            if ($familyMember->relationship === 'Kepala Keluarga') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Tidak dapat menghapus kepala keluarga'
-                ], 422);
-            }
-
-            $familyMember->delete();
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Anggota keluarga berhasil dihapus',
-                'data' => null
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghapus anggota keluarga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to add family member',
+                $e->getMessage(),
+                500
+            );
         }
     }
 
@@ -457,20 +408,19 @@ class FamilyCardController extends Controller
                 ->limit(20)
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Warga yang tersedia',
-                'data' => [
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
                     'available_residents' => $availableResidents,
                     'total_available' => $availableResidents->count()
                 ]
-            ], 200);
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mencari warga',
-                'error' => $e->getMessage()
-            ], 500);
+            return ApiResponse::error(
+                'Failed to search available data',
+                $e->getMessage(),
+                500
+            );
         }
     }
 }

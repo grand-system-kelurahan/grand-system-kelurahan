@@ -22,8 +22,8 @@ class StoreRegionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string',
-            'encoded_geometry' => 'required|string',
+            'name'              => 'required|string',
+            'encoded_geometry'  => 'required|string',
         ];
     }
 }

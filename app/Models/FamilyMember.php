@@ -14,8 +14,13 @@ class FamilyMember extends Model
     protected $table = 'family_members';
     protected $guarded = [];
 
-    public function residen(): BelongsTo
+    public function resident(): BelongsTo
     {
         return $this->belongsTo(Resident::class);
+    }
+
+    public function familyCard(): BelongsTo
+    {
+        return $this->belongsTo(FamilyCard::class);
     }
 }

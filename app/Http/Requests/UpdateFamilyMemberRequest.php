@@ -11,7 +11,7 @@ class UpdateFamilyMemberRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,7 +22,9 @@ class UpdateFamilyMemberRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'family_card_id'    => 'nullable|numeric|exists:family_cards,id',
+            'resident_id'       => 'nullable|numeric|exists:residents,id',
+            'relationship'      => 'nullable|string',
         ];
     }
 }
