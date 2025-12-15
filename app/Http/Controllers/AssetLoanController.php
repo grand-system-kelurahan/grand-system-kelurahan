@@ -133,6 +133,7 @@ class AssetLoanController extends Controller
             'loan_date' => 'required|date',
             'planned_return_date' => 'required|date|after_or_equal:loan_date',
             'loan_reason' => 'nullable|string',
+            'resident_id' => 'required|exists:residents,id',
         ]);
 
         if ($validator->fails()) {
@@ -150,7 +151,7 @@ class AssetLoanController extends Controller
 
         $loan = AssetLoan::create([
             'asset_id' => $request->asset_id,
-            'resident_id' => Auth::id(),
+            'resident_id' => $request->resident_id,
             'quantity' => $request->quantity,
             'loan_date' => $request->loan_date,
             'planned_return_date' => $request->planned_return_date,
