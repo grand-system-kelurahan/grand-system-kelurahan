@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetLoan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
@@ -113,7 +114,6 @@ class AssetLoanController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'asset_id' => 'required|exists:assets,id',
-            'resident_id' => 'required|integer',
             'quantity' => 'required|integer|min:1',
             'loan_date' => 'required|date',
             'planned_return_date' => 'required|date|after_or_equal:loan_date',
@@ -135,7 +135,7 @@ class AssetLoanController extends Controller
 
         $loan = AssetLoan::create([
             'asset_id' => $request->asset_id,
-            'resident_id' => $request->resident_id,
+            'resident_id' => Auth::id(),
             'quantity' => $request->quantity,
             'loan_date' => $request->loan_date,
             'planned_return_date' => $request->planned_return_date,
