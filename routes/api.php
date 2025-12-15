@@ -40,3 +40,5 @@ Route::apiResource('regions', RegionController::class);
 Route::apiResource('points-of-interest', PointOfInterestController::class);
 Route::apiResource('resident-houses', ResidentHouseController::class);
 // Route::post('/residents/bulk-delete', [ResidentController::class, 'bulkDelete']);
+
+require __DIR__ . '/api/asset_loan.php';
