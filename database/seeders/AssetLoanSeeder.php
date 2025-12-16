@@ -72,6 +72,30 @@ class AssetLoanSeeder extends Seeder
                     'loan_reason' => 'Pinjam untuk kegiatan warga',
                     'rejected_reason' => 'Waktu peminjaman bentrok dengan kegiatan lain',
                 ]);
+
+                // BORROWED TAMBAHAN (simulasi peminjaman aktif lebih dari satu)
+                $additionalBorrowCount = rand(0, 2); // 0–2 peminjaman tambahan
+
+                for ($i = 0; $i < $additionalBorrowCount; $i++) {
+                    if ($asset->available_stock <= 0) {
+                        break;
+                    }
+
+                    $borrowQty = rand(1, min(2, $asset->available_stock));
+
+                    AssetLoan::create([
+                        'asset_id' => $asset->id,
+                        'resident_id' => rand(1, 5),
+                        'quantity' => $borrowQty,
+                        'loan_date' => Carbon::now()->subDays(rand(3, 7))->toDateString(),
+                        'planned_return_date' => Carbon::now()->addDays(rand(1, 5))->toDateString(),
+                        'loan_status' => AssetLoan::STATUS_BORROWED,
+                        'loan_reason' => 'Dipinjam untuk kegiatan operasional tambahan',
+                    ]);
+
+                    // kurangi stok
+                    $asset->decrement('available_stock', $borrowQty);
+                }
             }
         });
     }
