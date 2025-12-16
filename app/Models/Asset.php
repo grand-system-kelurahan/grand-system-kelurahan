@@ -18,6 +18,8 @@ class Asset extends Model
         'asset_status',
     ];
 
+    protected $appends = ['borrowed_stock'];
+
     public const TYPE_ITEM = 'item';
     public const TYPE_ROOM = 'room';
 
@@ -27,5 +29,11 @@ class Asset extends Model
     public function loans(): HasMany
     {
         return $this->hasMany(AssetLoan::class);
+    }
+
+
+    public function getBorrowedStockAttribute()
+    {
+        return $this->total_stock - $this->available_stock;
     }
 }

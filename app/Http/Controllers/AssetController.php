@@ -159,7 +159,7 @@ class AssetController extends Controller
             'asset_name' => 'sometimes|string|max:100|unique:assets,asset_name,' . $asset->id,
             'description' => 'sometimes|nullable|string',
             'asset_type' => 'sometimes|in:item,room',
-            'total_stock' => 'sometimes|integer|min:' . $asset->available_stock,
+            'total_stock' => 'sometimes|integer',
             'location' => 'sometimes|nullable|string|max:100',
             'asset_status' => 'sometimes|in:active,inactive',
         ]);
@@ -171,6 +171,12 @@ class AssetController extends Controller
         $validated = $validator->validated();
 
         if (isset($validated['total_stock'])) {
+            if ($validated['total_stock'] < $asset->borrowed_stock) {
+                return APIResponse::error('Validation failed.', [
+                    'total_stock' => 'Total stock cannot be less than borrowed stock'
+                ]);
+            }
+
             $oldTotal = $asset->total_stock;
             $oldAvailable = $asset->available_stock;
 
