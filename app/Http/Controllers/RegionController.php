@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateRegionRequest;
 use App\Models\Region;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Validator;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class RegionController extends Controller
@@ -67,12 +68,21 @@ class RegionController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreRegionRequest $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         try {
-            $data = $request->validated();
+            $validator = Validator::make($request->all(), [
+                'name'              => 'required|string',
+                'encoded_geometry'  => 'required|string',
+            ]);
 
-            $region = Region::create($data);
+            if ($validator->fails()) {
+                return ApiResponse::error('Validation failed.', $validator->errors());
+            }
+
+            $validated = $validator->validated();
+
+            $region = Region::create($validated);
 
             return ApiResponse::success(
                 'Data created successfully',
@@ -117,12 +127,21 @@ class RegionController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateRegionRequest $request, Region $region): JsonResponse
+    public function update(Request $request, Region $region): JsonResponse
     {
         try {
-            $data = $request->validated();
+            $validator = Validator::make($request->all(), [
+                'name'              => 'sometimes|string',
+                'encoded_geometry'  => 'sometimes|string',
+            ]);
 
-            $region->update($data);
+            if ($validator->fails()) {
+                return ApiResponse::error('Validation failed.', $validator->errors());
+            }
+
+            $validated = $validator->validated();
+
+            $region->update($validated);
             return ApiResponse::success(
                 'Data updated successfully',
                 [

@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 use App\Services\Region\RegionServiceClient;
+use Illuminate\Support\Facades\Validator;
 
 class FamilyCardController extends Controller
 {
@@ -134,55 +135,27 @@ class FamilyCardController extends Controller
     }
 
     /**
-     * Transform family card data for API response
-     */
-    private function transformFamilyCard($familyCard): array
-    {
-        $familyMembers = $familyCard->familyMembers ?? collect();
-
-        return [
-            'id' => $familyCard->id,
-            'head_of_family_name' => $familyCard->head_of_family_name,
-            'address' => $familyCard->address,
-            'publication_date' => $familyCard->publication_date->format('Y-m-d'),
-            'region_id' => $familyCard->region_id,
-            'region' => $familyCard->region ? [
-                'id' => $familyCard->region['id'] ?? null,
-                'name' => $familyCard->region['name'] ?? null,
-                'encoded_geometry' => $familyCard->region['encoded_geometry'] ?? null,
-            ] : null,
-            'total_members' => $familyCard->total_members ?? $familyMembers->count(),
-            'family_members' => $familyMembers->map(function ($member) {
-                return [
-                    'id' => $member->id,
-                    'resident_id' => $member->resident_id,
-                    'relationship' => $member->relationship,
-                    'resident' => $member->resident ? [
-                        'id' => $member->resident->id,
-                        'name' => $member->resident->name,
-                        'national_number_id' => $member->resident->national_number_id,
-                        'gender' => $member->resident->gender,
-                        'date_of_birth' => $member->resident->date_of_birth->format('Y-m-d'),
-                        'age' => $member->resident->age ?? now()->diffInYears($member->resident->date_of_birth),
-                    ] : null
-                ];
-            })->values()->toArray(),
-            'created_at' => $familyCard->created_at->format('Y-m-d H:i:s'),
-            'updated_at' => $familyCard->updated_at->format('Y-m-d H:i:s'),
-        ];
-    }
-
-    /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreFamilyCardRequest $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         DB::beginTransaction();
 
         try {
-            $data = $request->validated();
+            $validator = Validator::make($request->all(), [
+                'head_of_family_name'   => 'required|string',
+                'address'               => 'required|string',
+                'publication_date'      => 'required|date',
+                'region_id'             => 'required|numeric',
+            ]);
 
-            $regionId = $data['region_id'];
+            if ($validator->fails()) {
+                return ApiResponse::error('Validation failed.', $validator->errors());
+            }
+
+            $validated = $validator->validated();
+
+            $regionId = $validated['region_id'];
             $region = Region::find($regionId);
 
             if (!$region) {
@@ -192,11 +165,11 @@ class FamilyCardController extends Controller
                 ], 404);
             }
 
-            if (isset($data['publication_date'])) {
-                $data['publication_date'] = date('Y-m-d', strtotime($data['publication_date']));
+            if (isset($validated['publication_date'])) {
+                $validated['publication_date'] = date('Y-m-d', strtotime($validated['publication_date']));
             }
 
-            $familyCard = FamilyCard::create($data);
+            $familyCard = FamilyCard::create($validated);
 
             DB::commit();
 
@@ -320,9 +293,21 @@ class FamilyCardController extends Controller
         DB::beginTransaction();
 
         try {
-            $data = $request->validated();
+            $validator = Validator::make($request->all(), [
+                'head_of_family_name'   => 'sometimes|string',
+                'address'               => 'sometimes|string',
+                'publication_date'      => 'sometimes|date',
+                'region_id'             => 'sometimes|numeric',
+            ]);
 
-            $regionId = $data['region_id'];
+            if ($validator->fails()) {
+                return ApiResponse::error('Validation failed.', $validator->errors());
+            }
+
+            $validated = $validator->validated();
+
+
+            $regionId = $validated['region_id'];
             $region = Region::find($regionId);
 
             if (!$region) {
@@ -332,11 +317,11 @@ class FamilyCardController extends Controller
                 ], 404);
             }
 
-            if (isset($data['publication_date'])) {
-                $data['publication_date'] = date('Y-m-d', strtotime($data['publication_date']));
+            if (isset($validated['publication_date'])) {
+                $validated['publication_date'] = date('Y-m-d', strtotime($validated['publication_date']));
             }
 
-            $familyCard->update($data);
+            $familyCard->update($validated);
 
             DB::commit();
 

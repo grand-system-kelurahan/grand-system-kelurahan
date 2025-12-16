@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 use App\Services\Region\RegionServiceClient;
-
+use Illuminate\Support\Facades\Validator;
 
 class ResidentController extends Controller
 {
@@ -163,12 +163,36 @@ class ResidentController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreResidentRequest $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         try {
-            $data = $request->validated();
+            $validator = Validator::make($request->all(), [
+                'national_number_id'    => 'required|string',
+                'name'                  => 'required|string',
+                'gender'                => 'required|string',
+                'place_of_birth'        => 'required|string',
+                'date_of_birth'         => 'required|date',
+                'religion'              => 'required|string',
+                'rt'                    => 'required|string',
+                'rw'                    => 'required|string',
+                'education'             => 'required|string',
+                'occupation'            => 'required|string',
+                'marital_status'        => 'required|string',
+                'citizenship'           => 'required|string',
+                'blood_type'            => 'required|string',
+                'disabilities'          => 'required|string',
+                'father_name'           => 'required|string',
+                'mother_name'           => 'required|string',
+                'region_id'             => 'required|numeric',
+            ]);
 
-            $regionId = $data['region_id'];
+            if ($validator->fails()) {
+                return ApiResponse::error('Validation failed.', $validator->errors());
+            }
+
+            $validated = $validator->validated();
+
+            $regionId = $validated['region_id'];
             $region = Region::find($regionId);
 
             if (!$region) {
@@ -178,11 +202,11 @@ class ResidentController extends Controller
                 ], 404);
             }
 
-            if (isset($data['date_of_birth'])) {
-                $data['date_of_birth'] = date('Y-m-d', strtotime($data['date_of_birth']));
+            if (isset($validated['date_of_birth'])) {
+                $validated['date_of_birth'] = date('Y-m-d', strtotime($validated['date_of_birth']));
             }
 
-            $resident = Resident::create($data);
+            $resident = Resident::create($validated);
 
             return ApiResponse::success(
                 'Data created successfully',
@@ -246,8 +270,6 @@ class ResidentController extends Controller
      */
     private function transformResident(Resident $resident, ?array $regionData = null): array
     {
-        $age = now()->diffInYears($resident->date_of_birth);
-
         return [
             'id' => $resident->id,
             'national_number_id' => $resident->national_number_id,
@@ -285,12 +307,36 @@ class ResidentController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateResidentRequest $request, Resident $resident): JsonResponse
+    public function update(Request $request, Resident $resident): JsonResponse
     {
         try {
-            $data = $request->validated();
+            $validator = Validator::make($request->all(), [
+                'national_number_id'    => 'sometimes|string',
+                'name'                  => 'sometimes|string',
+                'gender'                => 'sometimes|string',
+                'place_of_birth'        => 'sometimes|string',
+                'date_of_birth'         => 'sometimes|date',
+                'religion'              => 'sometimes|string',
+                'rt'                    => 'sometimes|string',
+                'rw'                    => 'sometimes|string',
+                'education'             => 'sometimes|string',
+                'occupation'            => 'sometimes|string',
+                'marital_status'        => 'sometimes|string',
+                'citizenship'           => 'sometimes|string',
+                'blood_type'            => 'sometimes|string',
+                'disabilities'          => 'sometimes|string',
+                'father_name'           => 'sometimes|string',
+                'mother_name'           => 'sometimes|string',
+                'region_id'             => 'sometimes|numeric',
+            ]);
 
-            $regionId = $data['region_id'];
+            if ($validator->fails()) {
+                return ApiResponse::error('Validation failed.', $validator->errors());
+            }
+
+            $validated = $validator->validated();
+
+            $regionId = $validated['region_id'];
             $region = Region::find($regionId);
 
             if (!$region) {
@@ -300,11 +346,11 @@ class ResidentController extends Controller
                 ], 404);
             }
 
-            if (isset($data['date_of_birth'])) {
-                $data['date_of_birth'] = date('Y-m-d', strtotime($data['date_of_birth']));
+            if (isset($validated['date_of_birth'])) {
+                $validated['date_of_birth'] = date('Y-m-d', strtotime($validated['date_of_birth']));
             }
 
-            $resident->update($data);
+            $resident->update($validated);
 
             return ApiResponse::success(
                 'Data updated successfully',
