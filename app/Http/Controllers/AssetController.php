@@ -155,6 +155,7 @@ class AssetController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
+            'asset_code' => 'sometimes|string|max:30|unique:assets,asset_code,' . $asset->id,
             'asset_name' => 'sometimes|string|max:100|unique:assets,asset_name,' . $asset->id,
             'description' => 'sometimes|nullable|string',
             'asset_type' => 'sometimes|in:item,room',

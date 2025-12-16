@@ -16,35 +16,35 @@ class UserSeeder extends Seeder
                 'username' => 'admin',
                 'email' => 'admin@kelurahan.local',
                 'password' => 'admin123',
-                'role' => 'admin',
+                'role' => User::ROLE_ADMIN,
             ],
             [
                 'name' => 'Staff Kelurahan',
                 'username' => 'staff',
                 'email' => 'staff@kelurahan.local',
                 'password' => 'staff123',
-                'role' => 'pegawai',
+                'role' => User::ROLE_PEGAWAI
             ],
             [
                 'name' => 'Operator Pendaftaran',
                 'username' => 'operator',
                 'email' => 'operator@kelurahan.local',
                 'password' => 'operator123',
-                'role' => 'user',
+                'role' => User::ROLE_USER
             ],
             [
                 'name' => 'Warga Contoh',
                 'username' => 'warga',
                 'email' => 'warga@kelurahan.local',
                 'password' => 'warga123',
-                'role' => 'user',
+                'role' => User::ROLE_USER
             ],
             [
                 'name' => 'Kepala Kelurahan',
                 'username' => 'lurah',
                 'email' => 'lurah@kelurahan.local',
                 'password' => 'lurah123',
-                'role' => 'admin',
+                'role' => User::ROLE_ADMIN
             ],
         ];
 
@@ -60,7 +60,7 @@ class UserSeeder extends Seeder
                     'username' => $userData['username'],
                     'email' => $userData['email'],
                     'password' => Hash::make($userData['password']),
-                    'role' => $userData['role'] ?? 'user',
+                    'role' => $userData['role'] ?? User::ROLE_USER
                 ]);
 
                 $this->command->info("User {$userData['name']} created successfully.");
@@ -89,7 +89,7 @@ class UserSeeder extends Seeder
                 'username' => $username,
                 'email' => $email,
                 'password' => Hash::make('password123'),
-                'role' => $faker->randomElement(['user', 'staff', 'operator']),
+                'role' => $faker->randomElement([User::ROLE_USER, User::ROLE_PEGAWAI, User::ROLE_ADMIN]),
             ]);
         }
 

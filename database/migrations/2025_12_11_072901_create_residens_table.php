@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('national_number_id')->unique();
             $table->string('name');
-            $table->string('gender');
+            $table->enum('gender', ['male', 'female']);
             $table->string('place_of_birth');
             $table->date('date_of_birth');
             $table->string('religion');
@@ -29,9 +29,9 @@ return new class extends Migration
             $table->string('disabilities');
             $table->string('father_name');
             $table->string('mother_name');
-            $table->unsignedBigInteger('region_id');
+            $table->unsignedBigInteger('region_id')->nullable();
             $table->timestamps();
-
+            
             $table->foreign('region_id')
                 ->references('id')
                 ->on('regions')

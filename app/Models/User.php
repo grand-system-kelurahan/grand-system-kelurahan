@@ -47,4 +47,13 @@ class User extends Authenticatable
             'password'          => 'hashed',
         ];
     }
+
+    public const ROLE_ADMIN = 'admin';
+    public const ROLE_PEGAWAI = 'pegawai';
+    public const ROLE_USER = 'user';
+
+    public function hasRole(string|array $roles): bool
+    {
+        return in_array($this->role, (array) $roles, true);
+    }
 }
