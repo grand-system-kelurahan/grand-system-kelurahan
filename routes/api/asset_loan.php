@@ -6,9 +6,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('assets')->group(function () {
+        Route::get('/report', [AssetController::class, 'report']);
         Route::get('/', [AssetController::class, 'index']);
         Route::get('/{id}', [AssetController::class, 'show']);
-        Route::get('/report', [AssetController::class, 'report']);
 
         Route::middleware('role:admin,staff')->group(function () {
             Route::post('/', [AssetController::class, 'store']);
@@ -18,9 +18,9 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('asset-loans')->group(function () {
+        Route::get('/report', [AssetLoanController::class, 'report']);
         Route::get('/', [AssetLoanController::class, 'index']);
         Route::get('/{id}', [AssetLoanController::class, 'show']);
-        Route::get('/report', [AssetLoanController::class, 'report']);
         Route::post('/', [AssetLoanController::class, 'store']);
 
         Route::middleware('role:admin,staff')->group(function () {

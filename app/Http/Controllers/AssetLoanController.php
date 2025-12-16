@@ -6,33 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetLoan;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Route;
+use App\Services\Resident\ResidentServiceClient;
 
 class AssetLoanController extends Controller
 {
-    private function fetchResidentById($id)
-    {
-        $request = Request::create('/api/residents/' . $id, 'GET');
-        $response = Route::dispatch($request);
-
-        $data = json_decode($response->getContent(), true);
-        return $data['data']['resident'];
-    }
-
-    private function fetchAllResidents()
-    {
-        $request = Request::create('/api/residents', 'GET');
-        $response = Route::dispatch($request);
-
-        $data = json_decode($response->getContent(), true);
-        return $data['data']['residents'];
-    }
-
-    public function index(Request $request)
+    public function index(Request $request, ResidentServiceClient $residentServiceClient)
     {
         $query = AssetLoan::with('asset');
 
@@ -98,6 +78,18 @@ class AssetLoanController extends Controller
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
         $paginator->appends($request->query());
 
+        // compose residents
+        $residentIds = collect($paginator->items())
+            ->pluck('resident_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+        $residents = $residentServiceClient->findByIds($residentIds);
+        foreach ($paginator->items() as $assetLoan) {
+            $assetLoan['resident'] = $residents[$assetLoan->resident_id] ?? null;
+        }
+
         $data = [
             'asset_loans' => $paginator->items(),
             'meta' => [
@@ -115,13 +107,15 @@ class AssetLoanController extends Controller
         return ApiResponse::success('Asset loans retrieved successfully.', $data);
     }
 
-    public function show(int $id)
+    public function show(string $id, ResidentServiceClient $residentServiceClient)
     {
         $loan = AssetLoan::with('asset')->find($id);
 
         if (!$loan) {
             return APIResponse::error('Asset loan not found.', null, 404);
         }
+
+        $loan['resident'] = $residentServiceClient->findById($loan->resident_id);
 
         return APIResponse::success('Asset loan retrieved successfully.', $loan);
     }
@@ -270,7 +264,7 @@ class AssetLoanController extends Controller
         return APIResponse::success('Loan request rejected successfully.', $loan);
     }
 
-    public function report(Request $request)
+    public function report(Request $request, ResidentServiceClient $residentServiceClient)
     {
         $query = AssetLoan::with('asset');
 
@@ -358,6 +352,34 @@ class AssetLoanController extends Controller
             ->groupBy(fn($loan) => $loan->loan_date->format('Y-m-d'))
             ->map(fn($items) => $items->count());
 
+        $top_loaners = $loans
+            ->whereIn('loan_status', ['borrowed', 'returned'])
+            ->groupBy('resident_id')
+            ->map(fn($items) => $items->count()) // FREQUENCY
+            ->sortDesc()
+            ->take(3)
+            ->map(function ($totalLoans, $residentId) {
+                return [
+                    'resident_id' => (int) $residentId,
+                    'total_loans_approved' => $totalLoans,
+                ];
+            })
+            ->values();
+
+        // compose residents
+        $top_loaner_resident_ids = $top_loaners
+            ->pluck('resident_id')
+            ->values()
+            ->toArray();
+        $residents = $residentServiceClient->findByIds($top_loaner_resident_ids);
+        $top_loaners = $top_loaners->map(function ($loaner) use ($residents) {
+            return [
+                'resident_id' => $loaner['resident_id'],
+                'resident_name' => data_get($residents[$loaner['resident_id']], 'name'),
+                'total_loans_approved' => $loaner['total_loans_approved'],
+            ];
+        });
+
         $data = [
             'summary' => $summary,
             'top_assets' => $top_assets,
@@ -368,6 +390,7 @@ class AssetLoanController extends Controller
             'average_duration_days' => round($average_duration, 2),
             'monthly' => $monthly,
             'daily' => $daily,
+            'top_loaners' => $top_loaners,
         ];
 
         return APIResponse::success('Loan report generated successfully.', $data);
