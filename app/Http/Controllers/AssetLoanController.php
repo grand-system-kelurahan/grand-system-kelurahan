@@ -10,21 +10,26 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Route;
 
 class AssetLoanController extends Controller
 {
     private function fetchResidentById($id)
     {
-        $response = Http::timeout(3)
-            ->get('localhost:8000/api/residents/' . $id);
-        return $response->json();
+        $request = Request::create('/api/residents/' . $id, 'GET');
+        $response = Route::dispatch($request);
+
+        $data = json_decode($response->getContent(), true);
+        return $data['data']['resident'];
     }
 
     private function fetchAllResidents()
     {
-        $response = Http::timeout(3)
-            ->get('localhost:8000/api/residents');
-        return $response->json();
+        $request = Request::create('/api/residents', 'GET');
+        $response = Route::dispatch($request);
+
+        $data = json_decode($response->getContent(), true);
+        return $data['data']['residents'];
     }
 
     public function index(Request $request)
