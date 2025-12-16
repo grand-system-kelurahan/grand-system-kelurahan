@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             RegionSeeder::class,
             ResidentSeeder::class,
+            FamilySeeder::class,
             AssetSeeder::class,
             AssetLoanSeeder::class,
         ]);
