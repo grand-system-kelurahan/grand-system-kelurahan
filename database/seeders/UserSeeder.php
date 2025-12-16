@@ -62,10 +62,6 @@ class UserSeeder extends Seeder
                     'password' => Hash::make($userData['password']),
                     'role' => $userData['role'] ?? User::ROLE_USER
                 ]);
-
-                $this->command->info("User {$userData['name']} created successfully.");
-            } else {
-                $this->command->warn("User {$userData['name']} already exists.");
             }
         }
 
@@ -92,7 +88,5 @@ class UserSeeder extends Seeder
                 'role' => $faker->randomElement([User::ROLE_USER, User::ROLE_PEGAWAI, User::ROLE_ADMIN]),
             ]);
         }
-
-        $this->command->info('10 dummy users created.');
     }
 }
