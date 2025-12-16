@@ -5,15 +5,60 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LetterType;
 use Illuminate\Http\Request;
+use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class LetterTypeController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(LetterType::all());
+        try {
+            $query = LetterType::query();
+
+
+            if ($request->has('search') && $request->search != '') {
+                $search = $request->search;
+                $query->where('name', 'like', "%{$search}%");
+            }
+
+
+            $sortField = $request->get('sort_by', 'created_at');
+            $sortDirection = $request->get('sort_dir', 'desc');
+            $query->orderBy($sortField, $sortDirection);
+
+
+            $perPage = $request->get('per_page', 20);
+            $letterTypes = $query->paginate($perPage);
+
+            return ApiResponse::success(
+                'Data fetched successfully',
+                [
+                    'letterType' => $letterTypes->items(),
+                    'meta' => [
+                        'current_page' => $letterTypes->currentPage(),
+                        'last_page' => $letterTypes->lastPage(),
+                        'per_page' => $letterTypes->perPage(),
+                        'total' => $letterTypes->total(),
+                        'from' => $letterTypes->firstItem(),
+                        'to' => $letterTypes->lastItem(),
+                    ],
+                    'links' => [
+                        'first' => $letterTypes->url(1),
+                        'last' => $letterTypes->url($letterTypes->lastPage()),
+                        'prev' => $letterTypes->previousPageUrl(),
+                        'next' => $letterTypes->nextPageUrl(),
+                    ]
+                ]
+            );
+        } catch (\Exception $e) {
+            return ApiResponse::error(
+                'Failed to fetch data',
+                $e->getMessage(),
+                500
+            );
+        }
     }
 
     /**
@@ -29,7 +74,13 @@ class LetterTypeController extends Controller
 
         $letterType = LetterType::create($data);
 
-        return response()->json($letterType, 201);
+        return ApiResponse::success(
+            'Data created successfully',
+            [
+                'letterType' => $letterType
+            ],
+            201
+        );
     }
 
     /**
@@ -38,7 +89,12 @@ class LetterTypeController extends Controller
     public function show(string $id)
     {
         $letterType = LetterType::findOrFail($id);
-        return response()->json($letterType);
+        return ApiResponse::success(
+            'Data fetched successfully',
+            [
+                'letterType' => $letterType
+            ],
+        );
     }
 
     /**
@@ -56,7 +112,12 @@ class LetterTypeController extends Controller
 
         $letterType->update($data);
 
-        return response()->json($letterType);
+        return ApiResponse::success(
+            'Data updated successfully',
+            [
+                'letterType' => $letterType
+            ],
+        );
     }
 
     /**
@@ -67,6 +128,11 @@ class LetterTypeController extends Controller
         $letterType = LetterType::findOrFail($id);
         $letterType->delete();
 
-        return response()->json(null, 204);
+        return ApiResponse::success(
+            'Data deleted successfully',
+            [
+                'letterType' => $letterType
+            ],
+        );
     }
 }

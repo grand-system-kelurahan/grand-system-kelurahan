@@ -4,8 +4,8 @@ use App\Http\Controllers\Api\LetterApplicationController;
 use App\Http\Controllers\Api\LetterTypeController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/letter-types', [LetterTypeController::class, 'index']);
 Route::middleware('auth:sanctum')->group(function () {
-  Route::get('/letter-types', [LetterTypeController::class, 'index']);
   Route::post('/letter-types', [LetterTypeController::class, 'store']);
   Route::get('/letter-types/{id}', [LetterTypeController::class, 'show']);
   Route::put('/letter-types/{id}', [LetterTypeController::class, 'update']);
