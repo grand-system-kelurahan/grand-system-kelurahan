@@ -13,24 +13,26 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
+use App\Services\Region\RegionServiceClient;
 
 class FamilyCardController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
-            $query = FamilyCard::with(['region', 'familyMembers.resident']);
+            $query = FamilyCard::with(['familyMembers.resident']); // Hapus 'region'
 
             // Filtering
             if ($request->has('search') && $request->search != '') {
                 $search = $request->search;
-                $query->where(function ($q) use ($search) {
+                $query->where(function ($q) use ($search, $regionServiceClient) {
                     $q->where('head_of_family_name', 'like', "%{$search}%")
                         ->orWhere('address', 'like', "%{$search}%")
-                        ->orWhereHas('region', function ($q) use ($search) {
+                        // Hapus filter berdasarkan region name karena perlu API call
+                        ->orWhereHas('familyMembers.resident', function ($q) use ($search) {
                             $q->where('name', 'like', "%{$search}%");
                         });
                 });
@@ -56,6 +58,9 @@ class FamilyCardController extends Controller
             // Pagination
             $perPage = $request->get('per_page', 20);
             $familyCards = $query->paginate($perPage);
+
+            // Enrich family cards with region data
+            $familyCards = $this->enrichFamilyCardsWithRegions($familyCards, $regionServiceClient);
 
             // Hitung total anggota per keluarga
             $familyCards->getCollection()->transform(function ($familyCard) {
@@ -84,6 +89,87 @@ class FamilyCardController extends Controller
                 500
             );
         }
+    }
+
+    /**
+     * Enrich family cards with region data from API
+     */
+    private function enrichFamilyCardsWithRegions($familyCards, RegionServiceClient $regionServiceClient, bool $isPaginated = true)
+    {
+        if ($isPaginated) {
+            $collection = $familyCards->getCollection();
+        } else {
+            $collection = $familyCards;
+        }
+
+        // Extract unique region IDs from family cards
+        $regionIds = $collection
+            ->pluck('region_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // Get regions data from API
+        $regions = [];
+        if (!empty($regionIds)) {
+            $regions = $regionServiceClient->findByIds($regionIds);
+        }
+
+        // Convert regions to associative array with region_id as key
+        $regionsMap = collect($regions)->keyBy('id')->toArray();
+
+        // Enrich each family card with region data
+        $collection->transform(function ($familyCard) use ($regionsMap) {
+            $familyCard->region = $regionsMap[$familyCard->region_id] ?? null;
+            return $familyCard;
+        });
+
+        if ($isPaginated) {
+            $familyCards->setCollection($collection);
+            return $familyCards;
+        }
+
+        return $collection;
+    }
+
+    /**
+     * Transform family card data for API response
+     */
+    private function transformFamilyCard($familyCard): array
+    {
+        $familyMembers = $familyCard->familyMembers ?? collect();
+
+        return [
+            'id' => $familyCard->id,
+            'head_of_family_name' => $familyCard->head_of_family_name,
+            'address' => $familyCard->address,
+            'publication_date' => $familyCard->publication_date->format('Y-m-d'),
+            'region_id' => $familyCard->region_id,
+            'region' => $familyCard->region ? [
+                'id' => $familyCard->region['id'] ?? null,
+                'name' => $familyCard->region['name'] ?? null,
+                'encoded_geometry' => $familyCard->region['encoded_geometry'] ?? null,
+            ] : null,
+            'total_members' => $familyCard->total_members ?? $familyMembers->count(),
+            'family_members' => $familyMembers->map(function ($member) {
+                return [
+                    'id' => $member->id,
+                    'resident_id' => $member->resident_id,
+                    'relationship' => $member->relationship,
+                    'resident' => $member->resident ? [
+                        'id' => $member->resident->id,
+                        'name' => $member->resident->name,
+                        'national_number_id' => $member->resident->national_number_id,
+                        'gender' => $member->resident->gender,
+                        'date_of_birth' => $member->resident->date_of_birth->format('Y-m-d'),
+                        'age' => $member->resident->age ?? now()->diffInYears($member->resident->date_of_birth),
+                    ] : null
+                ];
+            })->values()->toArray(),
+            'created_at' => $familyCard->created_at->format('Y-m-d H:i:s'),
+            'updated_at' => $familyCard->updated_at->format('Y-m-d H:i:s'),
+        ];
     }
 
     /**
@@ -134,19 +220,81 @@ class FamilyCardController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(FamilyCard $familyCard): JsonResponse
+    public function show(int $id, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
-            $familyCard->load(['region', 'familyMembers.resident.region']);
+            $familyCard = FamilyCard::with(['familyMembers.resident'])->find($id);
 
+            if (!$familyCard) {
+                return ApiResponse::error(
+                    'Family card not found',
+                    null,
+                    404
+                );
+            }
+
+            // Get region data from API
+            $regionData = null;
+            if ($familyCard->region_id) {
+                $regionData = $regionServiceClient->findById($familyCard->region_id);
+            }
+
+            // Get statistics
             $totalMembers = $familyCard->familyMembers()->count();
             $membersByGender = $this->getMembersByGender($familyCard);
             $membersByAge = $this->getMembersByAge($familyCard);
 
+            // Transform family members with resident region data
+            $familyMembers = $familyCard->familyMembers->map(function ($member) use ($regionServiceClient) {
+                $memberData = [
+                    'id' => $member->id,
+                    'resident_id' => $member->resident_id,
+                    'relationship' => $member->relationship,
+                    'resident' => null
+                ];
+
+                if ($member->resident) {
+                    $residentRegionData = null;
+                    if ($member->resident->region_id) {
+                        $residentRegionData = $regionServiceClient->findById($member->resident->region_id);
+                    }
+
+                    $memberData['resident'] = [
+                        'id' => $member->resident->id,
+                        'name' => $member->resident->name,
+                        'national_number_id' => $member->resident->national_number_id,
+                        'gender' => $member->resident->gender,
+                        'date_of_birth' => $member->resident->date_of_birth,
+                        'age' => $member->resident->age ?? now()->diffInYears($member->resident->date_of_birth),
+                        'region_id' => $member->resident->region_id,
+                        'region' => $residentRegionData ? [
+                            'id' => $residentRegionData['id'] ?? null,
+                            'name' => $residentRegionData['name'] ?? null,
+                        ] : null
+                    ];
+                }
+
+                return $memberData;
+            });
+
             return ApiResponse::success(
                 'Data fetched successfully',
                 [
-                    'family_card' => $familyCard,
+                    'family_card' => [
+                        'id' => $familyCard->id,
+                        'head_of_family_name' => $familyCard->head_of_family_name,
+                        'address' => $familyCard->address,
+                        'publication_date' => $familyCard->publication_date,
+                        'region_id' => $familyCard->region_id,
+                        'region' => $regionData ? [
+                            'id' => $regionData['id'] ?? null,
+                            'name' => $regionData['name'] ?? null,
+                            'encoded_geometry' => $regionData['encoded_geometry'] ?? null,
+                        ] : null,
+                        'created_at' => $familyCard->created_at->format('Y-m-d H:i:s'),
+                        'updated_at' => $familyCard->updated_at->format('Y-m-d H:i:s'),
+                    ],
+                    'family_members' => $familyMembers,
                     'statistics' => [
                         'total_members' => $totalMembers,
                         'members_by_gender' => $membersByGender,

@@ -10,16 +10,18 @@ use App\Models\Resident;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
+use App\Services\Region\RegionServiceClient;
+
 
 class ResidentController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
-            $query = Resident::with(['region', 'familyMember']);
+            $query = Resident::query();
 
             if ($request->filled('ids')) {
                 $ids = $request->ids;
@@ -67,16 +69,25 @@ class ResidentController extends Controller
             );
 
             if (!$withPagination) {
+                $residents = $query->get();
+
+
+                $residents = $this->enrichResidentsWithRegions($residents, $regionServiceClient);
+
                 return ApiResponse::success(
                     'Data fetched successfully',
                     [
-                        'residents' => $query->get(),
+                        'residents' => $residents,
                     ]
                 );
             }
 
             $perPage = $request->get('per_page', 20);
-            $residents = $query->paginate($perPage);
+            $page = $request->get('page', 1);
+
+            $residents = $query->paginate($perPage, ['*'], 'page', $page);
+
+            $residents = $this->enrichResidentsWithRegions($residents, $regionServiceClient, true);
 
             return ApiResponse::success(
                 'Data fetched successfully',
@@ -105,6 +116,48 @@ class ResidentController extends Controller
                 500
             );
         }
+    }
+
+    /**
+     * Enrich residents with region data from API
+     */
+    private function enrichResidentsWithRegions($residents, RegionServiceClient $regionServiceClient, bool $isPaginated = false)
+    {
+        if ($isPaginated) {
+            $residentsCollection = $residents->getCollection();
+        } else {
+            $residentsCollection = $residents;
+        }
+
+        $regionIds = $residentsCollection
+            ->pluck('region_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $regions = [];
+        if (!empty($regionIds)) {
+            $regions = $regionServiceClient->findByIds($regionIds);
+            $regions = collect($regions)->keyBy('id')->toArray();
+        }
+
+
+        $residentsCollection->transform(function ($resident) use ($regions) {
+            $resident->region = $regions[$resident->region_id] ?? null;
+            if (!isset($resident->familyMember)) {
+                $resident->load('familyMember');
+            }
+
+            return $resident;
+        });
+
+        if ($isPaginated) {
+            $residents->setCollection($residentsCollection);
+            return $residents;
+        }
+
+        return $residentsCollection;
     }
 
     /**
@@ -150,13 +203,33 @@ class ResidentController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Resident $resident): JsonResponse
+    public function show(int $id, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
+            // Find resident by ID
+            $resident = Resident::with('familyMember')->find($id);
+
+            if (!$resident) {
+                return ApiResponse::error(
+                    'Resident not found',
+                    null,
+                    404
+                );
+            }
+
+            // Get region data from API
+            $regionData = null;
+            if ($resident->region_id) {
+                $regionData = $regionServiceClient->findById($resident->region_id);
+            }
+
+            // Transform resident data
+            $transformedResident = $this->transformResident($resident, $regionData);
+
             return ApiResponse::success(
                 'Data fetched successfully',
                 [
-                    'resident' => $resident->load('region')
+                    'resident' => $transformedResident
                 ]
             );
         } catch (\Exception $e) {
@@ -166,6 +239,47 @@ class ResidentController extends Controller
                 500
             );
         }
+    }
+
+    /**
+     * Transform resident data with region
+     */
+    private function transformResident(Resident $resident, ?array $regionData = null): array
+    {
+        $age = now()->diffInYears($resident->date_of_birth);
+
+        return [
+            'id' => $resident->id,
+            'national_number_id' => $resident->national_number_id,
+            'name' => $resident->name,
+            'gender' => $resident->gender,
+            'place_of_birth' => $resident->place_of_birth,
+            'date_of_birth' => $resident->date_of_birth,
+            'religion' => $resident->religion,
+            'rt' => $resident->rt,
+            'rw' => $resident->rw,
+            'education' => $resident->education,
+            'occupation' => $resident->occupation,
+            'marital_status' => $resident->marital_status,
+            'citizenship' => $resident->citizenship,
+            'blood_type' => $resident->blood_type,
+            'disabilities' => $resident->disabilities,
+            'father_name' => $resident->father_name,
+            'mother_name' => $resident->mother_name,
+            'region_id' => $resident->region_id,
+            'region' => $regionData ? [
+                'id' => $regionData['id'] ?? null,
+                'name' => $regionData['name'] ?? null,
+                'encoded_geometry' => $regionData['encoded_geometry'] ?? null,
+            ] : null,
+            'family_member' => $resident->familyMember ? [
+                'id' => $resident->familyMember->id,
+                'family_card_id' => $resident->familyMember->family_card_id,
+                'relationship' => $resident->familyMember->relationship,
+            ] : null,
+            'created_at' => $resident->created_at->format('Y-m-d H:i:s'),
+            'updated_at' => $resident->updated_at->format('Y-m-d H:i:s'),
+        ];
     }
 
     /**
