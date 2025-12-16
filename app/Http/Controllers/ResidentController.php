@@ -21,8 +21,19 @@ class ResidentController extends Controller
         try {
             $query = Resident::with(['region', 'familyMember']);
 
+            if ($request->filled('ids')) {
+                $ids = $request->ids;
 
-            if ($request->has('search') && $request->search != '') {
+                if (is_string($ids)) {
+                    $ids = array_filter(explode(',', $ids));
+                }
+
+                if (is_array($ids) && count($ids) > 0) {
+                    $query->whereIn('id', $ids);
+                }
+            }
+
+            if ($request->filled('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
@@ -30,27 +41,39 @@ class ResidentController extends Controller
                 });
             }
 
-            if ($request->has('rt')) {
+            if ($request->filled('rt')) {
                 $query->where('rt', $request->rt);
             }
 
-            if ($request->has('rw')) {
+            if ($request->filled('rw')) {
                 $query->where('rw', $request->rw);
             }
 
-            if ($request->has('region_id')) {
+            if ($request->filled('region_id')) {
                 $query->where('region_id', $request->region_id);
             }
 
-            if ($request->has('gender')) {
+            if ($request->filled('gender')) {
                 $query->where('gender', $request->gender);
             }
-
 
             $sortField = $request->get('sort_by', 'created_at');
             $sortDirection = $request->get('sort_dir', 'desc');
             $query->orderBy($sortField, $sortDirection);
 
+            $withPagination = filter_var(
+                $request->get('with_pagination', true),
+                FILTER_VALIDATE_BOOLEAN
+            );
+
+            if (!$withPagination) {
+                return ApiResponse::success(
+                    'Data fetched successfully',
+                    [
+                        'residents' => $query->get(),
+                    ]
+                );
+            }
 
             $perPage = $request->get('per_page', 20);
             $residents = $query->paginate($perPage);
