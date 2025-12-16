@@ -57,7 +57,7 @@ class ResidentSeeder extends Seeder
                 ]),
                 'father_name' => $faker->name('male'),
                 'mother_name' => $faker->name('female'),
-                'region_id' => $faker->optional()->randomElement($regionIds),
+                'region_id' => $faker->randomElement($regionIds),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

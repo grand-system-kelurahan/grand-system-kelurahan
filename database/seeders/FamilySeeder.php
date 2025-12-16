@@ -31,7 +31,7 @@ class FamilySeeder extends Seeder
         ];
 
         // Tentukan jumlah KK (misal 30 KK atau sesuai jumlah resident)
-        $familyCount = min(30, values: intdiv(count($residentIds), 2));
+        $familyCount = min(30, intdiv(count($residentIds), 2));
 
         for ($i = 0; $i < $familyCount; $i++) {
 
