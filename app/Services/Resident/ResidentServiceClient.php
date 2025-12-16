@@ -10,7 +10,7 @@ class ResidentServiceClient
     /**
      * Fetch single resident by ID
      */
-    public function findById(int $id): ?array
+    public function findById(int $id)
     {
         $request = Request::create("/api/residents/{$id}", 'GET');
         $response = Route::dispatch($request);
