@@ -171,7 +171,14 @@ class AssetController extends Controller
         $validated = $validator->validated();
 
         if (isset($validated['total_stock'])) {
-            $asset->total_stock = $validated['total_stock'];
+            $oldTotal = $asset->total_stock;
+            $oldAvailable = $asset->available_stock;
+
+            $borrowed = $oldTotal - $oldAvailable;
+            $newTotal = $validated['total_stock'];
+
+            $asset->total_stock = $newTotal;
+            $asset->available_stock = max($newTotal - $borrowed, 0);
         }
 
         $asset->fill($validated);
