@@ -4,7 +4,7 @@ use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetLoanController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('assets')->group(function () {
         Route::get('/report', [AssetController::class, 'report']);
         Route::get('/', [AssetController::class, 'index']);

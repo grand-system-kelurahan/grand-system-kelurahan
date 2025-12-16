@@ -42,4 +42,9 @@ class Resident extends Model
     {
         return now()->diffInYears($this->date_of_birth);
     }
+
+    public function letterApplications()
+    {
+        return $this->hasMany(LetterApplication::class);
+    }
 }
