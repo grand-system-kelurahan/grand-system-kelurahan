@@ -35,9 +35,7 @@ class FamilySeeder extends Seeder
 
         for ($i = 0; $i < $familyCount; $i++) {
 
-            // ======================
-            // 1️⃣ INSERT FAMILY CARD
-            // ======================
+            // INSERT FAMILY CARD
             $familyCardId = DB::table('family_cards')->insertGetId([
                 'head_of_family_name' => $faker->name('male'),
                 'address' => $faker->address,
@@ -49,9 +47,7 @@ class FamilySeeder extends Seeder
                 'updated_at' => now(),
             ]);
 
-            // ======================
-            // 2️⃣ KEPALA KELUARGA
-            // ======================
+            // KEPALA KELUARGA
             $headResidentId = array_shift($residentIds);
             if (!$headResidentId) break;
 
@@ -63,9 +59,7 @@ class FamilySeeder extends Seeder
                 'updated_at' => now(),
             ]);
 
-            // ======================
-            // 3️⃣ ANGGOTA KELUARGA
-            // ======================
+            // ANGGOTA KELUARGA
             $memberCount = rand(1, 4);
 
             for ($j = 0; $j < $memberCount; $j++) {
