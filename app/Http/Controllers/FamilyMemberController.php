@@ -93,7 +93,6 @@ class FamilyMemberController extends Controller
             $data = $request->validated();
 
 
-            // Tambahkan family_card_id dari route parameter
             $data['family_card_id'] = $familyCard->id;
 
             // Cek apakah resident sudah menjadi anggota keluarga lain
