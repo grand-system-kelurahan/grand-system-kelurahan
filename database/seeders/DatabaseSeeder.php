@@ -17,9 +17,13 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             RegionSeeder::class,
             ResidentSeeder::class,
-            FamilySeeder::class,
-            AssetSeeder::class,
+            UserSeeder::class,
             AssetLoanSeeder::class,
+            AssetSeeder::class,
+            FamilyCardSeeder::class,
+            FamilyMemberSeeder::class,
+            LetterTypeSeeder::class,
+            LetterApplicationSeeder::class,
         ]);
     }
 }

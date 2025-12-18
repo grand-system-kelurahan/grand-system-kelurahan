@@ -192,6 +192,7 @@ class FamilyCardController extends Controller
 
         try {
             $validator = Validator::make($request->all(), [
+                'family_card_number'    => 'required|string',
                 'head_of_family_name'   => 'required|string',
                 'address'               => 'required|string',
                 'publication_date'      => 'required|date',
@@ -288,6 +289,8 @@ class FamilyCardController extends Controller
                         'gender' => $member->resident->gender,
                         'date_of_birth' => $member->resident->date_of_birth,
                         'region_id' => $member->resident->region_id,
+                        'father_name' => $member->resident->father_name,
+                        'mother_name' => $member->resident->mother_name,
                         'region' => $residentRegionData ? [
                             'id' => $residentRegionData['id'] ?? null,
                             'name' => $residentRegionData['name'] ?? null,
@@ -303,6 +306,7 @@ class FamilyCardController extends Controller
                 [
                     'family_card' => [
                         'id' => $familyCard->id,
+                        'family_card_number' => $familyCard->family_card_number,
                         'head_of_family_name' => $familyCard->head_of_family_name,
                         'address' => $familyCard->address,
                         'publication_date' => $familyCard->publication_date,
@@ -342,6 +346,7 @@ class FamilyCardController extends Controller
 
         try {
             $validator = Validator::make($request->all(), [
+                'family_card_number'   => 'sometimes|string',
                 'head_of_family_name'   => 'sometimes|string',
                 'address'               => 'sometimes|string',
                 'publication_date'      => 'sometimes|date',

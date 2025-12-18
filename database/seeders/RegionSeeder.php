@@ -20,7 +20,7 @@ class RegionSeeder extends Seeder
         foreach ($regions as $region) {
             DB::table('regions')->insert([
                 'name' => $region,
-                'encoded_geometry' => null,
+                'encoded_geometry' => $region,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

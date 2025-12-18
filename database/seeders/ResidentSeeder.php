@@ -14,7 +14,7 @@ class ResidentSeeder extends Seeder
 
         $regionIds = DB::table('regions')->pluck('id')->toArray();
 
-        for ($i = 0; $i < 50; $i++) {
+        for ($i = 0; $i < 100; $i++) {
             DB::table('residents')->insert([
                 'national_number_id' => $faker->unique()->numerify('################'),
                 'name' => $faker->name,
