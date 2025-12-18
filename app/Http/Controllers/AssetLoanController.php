@@ -1,14 +1,13 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetLoan;
+use App\Services\Resident\ResidentServiceClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
-use App\Services\Resident\ResidentServiceClient;
 
 class AssetLoanController extends Controller
 {
@@ -49,7 +48,7 @@ class AssetLoanController extends Controller
         }
 
         // sorting
-        $sortBy = $request->get('sort_by', 'created_at');
+        $sortBy    = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
 
         $allowedSortBy = [
@@ -61,11 +60,11 @@ class AssetLoanController extends Controller
             'created_at',
         ];
 
-        if (!in_array($sortBy, $allowedSortBy)) {
+        if (! in_array($sortBy, $allowedSortBy)) {
             $sortBy = 'created_at';
         }
 
-        if (!in_array($sortOrder, ['asc', 'desc'])) {
+        if (! in_array($sortOrder, ['asc', 'desc'])) {
             $sortOrder = 'desc';
         }
 
@@ -73,7 +72,7 @@ class AssetLoanController extends Controller
 
         // pagination
         $perPage = (int) $request->get('per_page', 10);
-        $page = (int) $request->get('page', 1);
+        $page    = (int) $request->get('page', 1);
 
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
         $paginator->appends($request->query());
@@ -92,13 +91,13 @@ class AssetLoanController extends Controller
 
         $data = [
             'asset_loans' => $paginator->items(),
-            'meta' => [
-                'current_page' => $paginator->currentPage(),
-                'from' => $paginator->firstItem(),
-                'last_page' => $paginator->lastPage(),
-                'per_page' => $paginator->perPage(),
-                'to' => $paginator->lastItem(),
-                'total' => $paginator->total(),
+            'meta'        => [
+                'current_page'  => $paginator->currentPage(),
+                'from'          => $paginator->firstItem(),
+                'last_page'     => $paginator->lastPage(),
+                'per_page'      => $paginator->perPage(),
+                'to'            => $paginator->lastItem(),
+                'total'         => $paginator->total(),
                 'next_page_url' => $paginator->nextPageUrl(),
                 'prev_page_url' => $paginator->previousPageUrl(),
             ],
@@ -111,7 +110,7 @@ class AssetLoanController extends Controller
     {
         $loan = AssetLoan::with('asset')->find($id);
 
-        if (!$loan) {
+        if (! $loan) {
             return APIResponse::error('Asset loan not found.', null, 404);
         }
 
@@ -127,12 +126,12 @@ class AssetLoanController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'asset_id' => 'required|exists:assets,id',
-            'quantity' => 'required|integer|min:1',
-            'loan_date' => 'required|date',
+            'asset_id'            => 'required|exists:assets,id',
+            'quantity'            => 'required|integer|min:1',
+            'loan_date'           => 'required|date',
             'planned_return_date' => 'required|date|after_or_equal:loan_date',
-            'loan_reason' => 'nullable|string',
-            'resident_id' => 'required|exists:residents,id',
+            'loan_reason'         => 'nullable|string',
+            'resident_id'         => 'required|exists:residents,id',
         ]);
 
         if ($validator->fails()) {
@@ -149,13 +148,13 @@ class AssetLoanController extends Controller
         }
 
         $loan = AssetLoan::create([
-            'asset_id' => $request->asset_id,
-            'resident_id' => $request->resident_id,
-            'quantity' => $request->quantity,
-            'loan_date' => $request->loan_date,
+            'asset_id'            => $request->asset_id,
+            'resident_id'         => $request->resident_id,
+            'quantity'            => $request->quantity,
+            'loan_date'           => $request->loan_date,
             'planned_return_date' => $request->planned_return_date,
-            'loan_status' => AssetLoan::STATUS_REQUESTED,
-            'loan_reason' => $request->loan_reason,
+            'loan_status'         => AssetLoan::STATUS_REQUESTED,
+            'loan_reason'         => $request->loan_reason,
         ]);
 
         return ApiResponse::success('Loan request created successfully.', $loan, 201);
@@ -169,7 +168,7 @@ class AssetLoanController extends Controller
     {
         $loan = AssetLoan::find($id);
 
-        if (!$loan) {
+        if (! $loan) {
             return APIResponse::error('Loan request not found.', null, 404);
         }
 
@@ -185,7 +184,7 @@ class AssetLoanController extends Controller
         if ($asset->available_stock < $loan->quantity) {
             return APIResponse::error(
                 'Validation failed.',
-                ['available_stock' => ['Not enough available stock'],],
+                ['available_stock' => ['Not enough available stock']],
             );
         }
 
@@ -206,7 +205,7 @@ class AssetLoanController extends Controller
     {
         $loan = AssetLoan::find($id);
 
-        if (!$loan) {
+        if (! $loan) {
             return APIResponse::error('Loan request not found.', null, 404);
         }
 
@@ -222,7 +221,7 @@ class AssetLoanController extends Controller
         $asset->increment('available_stock', $loan->quantity);
 
         $loan->update([
-            'loan_status' => AssetLoan::STATUS_RETURNED,
+            'loan_status'        => AssetLoan::STATUS_RETURNED,
             'actual_return_date' => now()->toDateString(),
         ]);
 
@@ -237,7 +236,7 @@ class AssetLoanController extends Controller
     {
         $loan = AssetLoan::find($id);
 
-        if (!$loan) {
+        if (! $loan) {
             return APIResponse::error('Loan request not found.', null, 404);
         }
 
@@ -257,7 +256,7 @@ class AssetLoanController extends Controller
         }
 
         $loan->update([
-            'loan_status' => AssetLoan::STATUS_REJECTED,
+            'loan_status'     => AssetLoan::STATUS_REJECTED,
             'rejected_reason' => $request->rejected_reason,
         ]);
 
@@ -290,15 +289,15 @@ class AssetLoanController extends Controller
 
         $summary = [
             'total_loans' => $loans->count(),
-            'requested' => $loans->where('loan_status', 'requested')->count(),
-            'borrowed' => $loans->where('loan_status', 'borrowed')->count(),
-            'returned' => $loans->where('loan_status', 'returned')->count(),
-            'rejected' => $loans->where('loan_status', 'rejected')->count(),
+            'requested'   => $loans->where('loan_status', 'requested')->count(),
+            'borrowed'    => $loans->where('loan_status', 'borrowed')->count(),
+            'returned'    => $loans->where('loan_status', 'returned')->count(),
+            'rejected'    => $loans->where('loan_status', 'rejected')->count(),
         ];
 
         $group_by_asset = $loans->groupBy('asset.asset_name')->map(function ($items) {
             return [
-                'total_loans' => $items->count(),
+                'total_loans'    => $items->count(),
                 'total_quantity' => $items->sum('quantity'),
             ];
         });
@@ -313,9 +312,9 @@ class AssetLoanController extends Controller
 
         $percentage = [
             'requested' => round(($summary['requested'] / $total) * 100, 2),
-            'borrowed' => round(($summary['borrowed'] / $total) * 100, 2),
-            'returned' => round(($summary['returned'] / $total) * 100, 2),
-            'rejected' => round(($summary['rejected'] / $total) * 100, 2),
+            'borrowed'  => round(($summary['borrowed'] / $total) * 100, 2),
+            'returned'  => round(($summary['returned'] / $total) * 100, 2),
+            'rejected'  => round(($summary['rejected'] / $total) * 100, 2),
         ];
 
         // group by asset type (item / room)
@@ -323,7 +322,7 @@ class AssetLoanController extends Controller
             ->groupBy('asset.asset_type')
             ->map(function ($items) {
                 return [
-                    'total_loans' => $items->count(),
+                    'total_loans'    => $items->count(),
                     'total_quantity' => $items->sum('quantity'),
                 ];
             });
@@ -360,37 +359,50 @@ class AssetLoanController extends Controller
             ->take(3)
             ->map(function ($totalLoans, $residentId) {
                 return [
-                    'resident_id' => (int) $residentId,
+                    'resident_id'          => (int) $residentId,
                     'total_loans_approved' => $totalLoans,
                 ];
             })
             ->values();
 
-        // compose residents
+        // compose residents - handle authentication issues gracefully
         $top_loaner_resident_ids = $top_loaners
             ->pluck('resident_id')
             ->values()
             ->toArray();
-        $residents = $residentServiceClient->findByIds($top_loaner_resident_ids);
-        $top_loaners = $top_loaners->map(function ($loaner) use ($residents) {
-            return [
-                'resident_id' => $loaner['resident_id'],
-                'resident_name' => data_get($residents[$loaner['resident_id']], 'name'),
-                'total_loans_approved' => $loaner['total_loans_approved'],
-            ];
-        });
+
+        try {
+            $residents   = $residentServiceClient->findByIds($top_loaner_resident_ids);
+            $top_loaners = $top_loaners->map(function ($loaner) use ($residents) {
+                return [
+                    'resident_id'          => $loaner['resident_id'],
+                    'resident_name'        => data_get($residents, $loaner['resident_id'] . '.name', 'Unknown'),
+                    'total_loans_approved' => $loaner['total_loans_approved'],
+                ];
+            });
+        } catch (\Exception $e) {
+            // If resident data cannot be fetched due to authentication issues,
+            // provide placeholder data for top_loaners
+            $top_loaners = $top_loaners->map(function ($loaner) {
+                return [
+                    'resident_id'          => $loaner['resident_id'],
+                    'resident_name'        => 'Resident #' . $loaner['resident_id'],
+                    'total_loans_approved' => $loaner['total_loans_approved'],
+                ];
+            });
+        }
 
         $data = [
-            'summary' => $summary,
-            'top_assets' => $top_assets,
-            'group_by_asset' => $group_by_asset,
-            'percentage' => $percentage,
-            'active_quantity' => $active_quantity,
-            'group_by_type' => $group_by_type,
+            'summary'               => $summary,
+            'top_assets'            => $top_assets,
+            'group_by_asset'        => $group_by_asset,
+            'percentage'            => $percentage,
+            'active_quantity'       => $active_quantity,
+            'group_by_type'         => $group_by_type,
             'average_duration_days' => round($average_duration, 2),
-            'monthly' => $monthly,
-            'daily' => $daily,
-            'top_loaners' => $top_loaners,
+            'monthly'               => $monthly,
+            'daily'                 => $daily,
+            'top_loaners'           => $top_loaners,
         ];
 
         return APIResponse::success('Loan report generated successfully.', $data);
