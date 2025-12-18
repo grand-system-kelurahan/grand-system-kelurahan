@@ -16,6 +16,7 @@ class AssetLoan extends Model
         'actual_return_date',
         'loan_status',
         'loan_reason',
+        'rejected_reason',
     ];
 
     protected $casts = [
