@@ -1,78 +1,113 @@
 <?php
 namespace App\Services\ReportWrapper;
 
-use Illuminate\Support\Facades\Http;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 class ReportWrapperService
 {
-    private function callApi($url)
+    private function callApi($path)
     {
         try {
-            if (! $url) {
-                throw new \Exception('API URL is not configured');
+            if (! $path) {
+                throw new \Exception('API path is not configured');
             }
 
-            $token = env('API_WRAPPER_TOKEN');
-            if (! $token) {
-                throw new \Exception('API authentication token is not configured');
+            $request = Request::create($path, 'GET');
+
+            // Add debug information to understand the error
+            $response = Route::dispatch($request);
+            $data     = json_decode($response->getContent(), true);
+
+            if ($response->getStatusCode() !== 200) {
+                // Include more detailed error information for debugging
+                return [
+                    'error'            => 'API request failed with status: ' . $response->getStatusCode(),
+                    'path'             => $path,
+                    'response_content' => $response->getContent(),
+                    'data'             => $data,
+                ];
             }
 
-            return Http::timeout(10)
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . $token,
-                ])
-                ->get($url)
-                ->json();
+            // Extract data using data_get() to match ResidentServiceClient pattern
+            // Handle both direct data and nested data structures
+            return data_get($data, 'data', $data);
         } catch (\Exception $e) {
-            return ['error' => $e->getMessage()];
+            return [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ];
         }
     }
 
     public function getResidentReport()
     {
-        $url = env('API_RESIDENT_URL', 'http://localhost:8000') . "/api/residents/statistics";
-        return $this->callApi($url);
+        $path = "/api/residents/statistics";
+        return $this->callApi($path);
     }
 
     public function getAssetReport()
     {
-        $url = env('API_ASSET_URL', 'http://localhost:8000') . "/api/assets/report";
-        return $this->callApi($url);
+        $path = "/api/assets/report";
+        return $this->callApi($path);
     }
 
     public function getAssetLoanReport()
     {
-        $url = env('API_ASSET_URL', 'http://localhost:8000') . "/api/asset-loans/report";
-        return $this->callApi($url);
+        $path = "/api/asset-loans/report";
+
+        // Add logging to debug the issue
+        \Log::info('ReportWrapperService: Calling asset loan report', [
+            'path'   => $path,
+            'caller' => debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3)[1]['function'] ?? 'unknown',
+        ]);
+
+        $result = $this->callApi($path);
+
+        \Log::info('ReportWrapperService: Asset loan report result', [
+            'has_error' => isset($result['error']),
+            'error'     => $result['error'] ?? null,
+            'path'      => $path,
+        ]);
+
+        return $result;
     }
 
     public function getLetterReport()
     {
-        $url = env('API_LETTER_URL', 'http://localhost:8000') . "/api/report";
-        return $this->callApi($url);
+        $path = "/api/letter-applications";
+        return $this->callApi($path);
     }
 
     public function getAttendanceReport()
     {
-        $url = env('API_ATTENDANCE_URL', 'http://localhost:8000') . "/api/report";
-        return $this->callApi($url);
+        // Since there's no specific attendance endpoint, we'll return a placeholder
+        // This could be implemented later when attendance tracking is added
+        return [
+            'message' => 'Attendance report not yet implemented',
+            'data'    => [
+                'total_attendance' => 0,
+                'attendance_rate'  => 0,
+                'monthly_trends'   => [],
+            ],
+        ];
     }
 
     public function getFamilyCardsReport()
     {
-        $url = env('API_RESIDENT_URL', 'http://localhost:8000') . "/api/family-cards/statistics";
-        return $this->callApi($url);
+        $path = "/api/family-cards/statistics";
+        return $this->callApi($path);
     }
 
     public function generateReport()
     {
         return [
-            'resident'     => $this->preprocessResidentDataForAdmin($this->getResidentReport()),
-            'asset'        => $this->preprocessAssetDataForAdmin($this->getAssetReport()),
-            'asset_loan'   => $this->preprocessAssetLoanDataForAdmin($this->getAssetLoanReport()),
-            'letter'       => $this->getLetterReport(),
-            'attendance'   => $this->getAttendanceReport(),
-            'family_cards' => $this->preprocessFamilyCardsDataForAdmin($this->getFamilyCardsReport()),
+            'resident'     => $this->getResidentReport(),
+            'asset'        => $this->getAssetReport(),
+            'asset_loan'   => $this->getAssetLoanReport(),
+            // 'letter'       => $this->getLetterReport(),
+            // 'attendance'   => $this->getAttendanceReport(),
+            'family_cards' => $this->getFamilyCardsReport(),
         ];
     }
 
@@ -86,11 +121,72 @@ class ReportWrapperService
             return $residentData;
         }
 
+        // Extract summary data
+        $summary = data_get($residentData, 'summary', []);
+
+        // Extract gender distribution
+        $genderDistribution = data_get($residentData, 'gender_distribution', []);
+
+        // Extract age analysis data
+        $ageAnalysis     = data_get($residentData, 'age_analysis', []);
+        $ageDistribution = data_get($ageAnalysis, 'distribution', []);
+        $ageGroups       = data_get($ageAnalysis, 'age_groups', []);
+
+        // Extract religion statistics (filter out invalid entries)
+        $religionStats         = data_get($residentData, 'religion_stats', []);
+        $filteredReligionStats = array_filter($religionStats, function ($key) {
+            return ! in_array($key, ['awda']);
+        }, ARRAY_FILTER_USE_KEY);
+
+        // Extract marital statistics (filter out invalid entries)
+        $maritalStats         = data_get($residentData, 'marital_stats', []);
+        $filteredMaritalStats = array_filter($maritalStats, function ($key) {
+            return ! in_array($key, ['wadd']);
+        }, ARRAY_FILTER_USE_KEY);
+
+        // Extract education statistics (filter out invalid entries)
+        $educationStats         = data_get($residentData, 'education_stats', []);
+        $filteredEducationStats = array_filter($educationStats, function ($key) {
+            return ! in_array($key, ['awd']);
+        }, ARRAY_FILTER_USE_KEY);
+
+        // Extract occupation statistics (filter out invalid entries)
+        $occupationStats         = data_get($residentData, 'occupation_stats', []);
+        $filteredOccupationStats = array_filter($occupationStats, function ($key) {
+            return ! in_array($key, ['awd']);
+        }, ARRAY_FILTER_USE_KEY);
+
+        // Extract geographical distribution
+        $geographicalDistribution = data_get($residentData, 'geographical_distribution', []);
+
         return [
-            'total_residents'     => $residentData['total_residents'] ?? 0,
-            'gender_distribution' => $residentData['gender_distribution'] ?? [],
-            'age_groups'          => $residentData['age_groups'] ?? [],
-            'summary_only'        => true,
+            'summary'                   => [
+                'total_residents' => data_get($summary, 'total_residents', 0),
+                'average_age'     => data_get($summary, 'average_age', 0),
+                'min_age'         => data_get($summary, 'min_age', 0),
+                'max_age'         => data_get($summary, 'max_age', 0),
+                'total_rt'        => data_get($summary, 'total_rt', 0),
+                'total_rw'        => data_get($summary, 'total_rw', 0),
+            ],
+            'gender_distribution'       => $genderDistribution,
+            'age_analysis'              => [
+                'distribution' => $ageDistribution,
+                'age_groups'   => $ageGroups,
+                'average_age'  => data_get($ageAnalysis, 'average_age', 0),
+                'min_age'      => data_get($ageAnalysis, 'min_age', 0),
+                'max_age'      => data_get($ageAnalysis, 'max_age', 0),
+            ],
+            'religion_stats'            => $filteredReligionStats,
+            'marital_stats'             => $filteredMaritalStats,
+            'education_stats'           => $filteredEducationStats,
+            'occupation_stats'          => $filteredOccupationStats,
+            'geographical_distribution' => [
+                'total_rt'        => data_get($geographicalDistribution, 'total_rt', 0),
+                'total_rw'        => data_get($geographicalDistribution, 'total_rw', 0),
+                'rt_distribution' => data_get($geographicalDistribution, 'rt_distribution', []),
+                'rw_distribution' => data_get($geographicalDistribution, 'rw_distribution', []),
+            ],
+            'summary_only'              => true,
         ];
     }
 
@@ -104,11 +200,24 @@ class ReportWrapperService
             return $familyCardsData;
         }
 
+        // Extract summary data
+        $totalFamilyCards        = data_get($familyCardsData, 'total_family_cards', 0);
+        $totalFamilyMembers      = data_get($familyCardsData, 'total_family_members', 0);
+        $averageMembersPerFamily = data_get($familyCardsData, 'average_members_per_family', 0);
+
+        // Extract cards by region (regional distribution)
+        $cardsByRegion = data_get($familyCardsData, 'cards_by_region', []);
+
+        // Extract yearly distribution
+        $yearlyDistribution = data_get($familyCardsData, 'yearly_distribution', []);
+
         return [
-            'total_family_cards'    => $familyCardsData['total_family_cards'] ?? 0,
-            'total_family_members'  => $familyCardsData['total_family_members'] ?? 0,
-            'regional_distribution' => $familyCardsData['regional_distribution'] ?? [],
-            'summary_only'          => true,
+            'total_family_cards'         => $totalFamilyCards,
+            'total_family_members'       => $totalFamilyMembers,
+            'average_members_per_family' => $averageMembersPerFamily,
+            'regional_distribution'      => $cardsByRegion,
+            'yearly_distribution'        => $yearlyDistribution,
+            'summary_only'               => true,
         ];
     }
 
@@ -122,10 +231,18 @@ class ReportWrapperService
             return $assetData;
         }
 
+        // Extract data from the asset report structure
+        $summary     = data_get($assetData, 'summary', []);
+        $groupByType = data_get($assetData, 'group_by_type', []);
+
         return [
-            'total_assets'         => $assetData['total_assets'] ?? 0,
-            'asset_categories'     => $assetData['asset_categories'] ?? [],
-            'asset_status_summary' => $assetData['asset_status_summary'] ?? [],
+            'total_assets'         => data_get($summary, 'total_assets', 0),
+            'asset_categories'     => $groupByType,
+            'asset_status_summary' => [
+                'total_stock'     => data_get($summary, 'total_stock', 0),
+                'available_stock' => data_get($summary, 'available_stock', 0),
+                'borrowed_stock'  => data_get($summary, 'borrowed_stock', 0),
+            ],
             'summary_only'         => true,
         ];
     }
@@ -140,102 +257,36 @@ class ReportWrapperService
             return $assetLoanData;
         }
 
+        // Extract data from the asset loan report structure
+        $summary         = data_get($assetLoanData, 'summary', []);
+        $percentage      = data_get($assetLoanData, 'percentage', []);
+        $topAssets       = data_get($assetLoanData, 'top_assets', []);
+        $activeQuantity  = data_get($assetLoanData, 'active_quantity', 0);
+        $groupByType     = data_get($assetLoanData, 'group_by_type', []);
+        $averageDuration = data_get($assetLoanData, 'average_duration_days', 0);
+        $monthly         = data_get($assetLoanData, 'monthly', []);
+        $daily           = data_get($assetLoanData, 'daily', []);
+        $groupByAsset    = data_get($assetLoanData, 'group_by_asset', []);
+
         return [
-            'total_active_loans'    => $assetLoanData['total_active_loans'] ?? 0,
-            'total_completed_loans' => $assetLoanData['total_completed_loans'] ?? 0,
-            'loan_statistics'       => $assetLoanData['loan_statistics'] ?? [],
+            'total_active_loans'    => data_get($summary, 'borrowed', 0),
+            'total_completed_loans' => data_get($summary, 'returned', 0),
+            'loan_statistics'       => [
+                'total_loans' => data_get($summary, 'total_loans', 0),
+                'requested'   => data_get($summary, 'requested', 0),
+                'borrowed'    => data_get($summary, 'borrowed', 0),
+                'returned'    => data_get($summary, 'returned', 0),
+                'rejected'    => data_get($summary, 'rejected', 0),
+                'percentages' => $percentage,
+            ],
+            'top_assets'            => $topAssets,
+            'group_by_asset'        => $groupByAsset,
+            'active_quantity'       => $activeQuantity,
+            'group_by_type'         => $groupByType,
+            'average_duration_days' => $averageDuration,
+            'monthly_trends'        => $monthly,
+            'daily_trends'          => $daily,
             'summary_only'          => true,
-        ];
-    }
-
-    /**
-     * Preprocess resident data for admin consumption
-     * Organizes resident statistics with all details for admin use
-     */
-    private function preprocessResidentDataForAdmin($residentData)
-    {
-        if (isset($residentData['error'])) {
-            return $residentData;
-        }
-
-        return [
-            'total_residents'       => $residentData['total_residents'] ?? 0,
-            'gender_distribution'   => $residentData['gender_distribution'] ?? [],
-            'age_groups'            => $residentData['age_groups'] ?? [],
-            'education_levels'      => $residentData['education_levels'] ?? [],
-            'employment_status'     => $residentData['employment_status'] ?? [],
-            'marital_status'        => $residentData['marital_status'] ?? [],
-            'religion_distribution' => $residentData['religion_distribution'] ?? [],
-            'detailed_breakdown'    => $residentData['detailed_breakdown'] ?? [],
-            'admin_data'            => true,
-        ];
-    }
-
-    /**
-     * Preprocess family cards data for admin consumption
-     * Organizes family cards with all details including addresses for admin use
-     */
-    private function preprocessFamilyCardsDataForAdmin($familyCardsData)
-    {
-        if (isset($familyCardsData['error'])) {
-            return $familyCardsData;
-        }
-
-        return [
-            'total_family_cards'    => $familyCardsData['total_family_cards'] ?? 0,
-            'total_family_members'  => $familyCardsData['total_family_members'] ?? 0,
-            'regional_distribution' => $familyCardsData['regional_distribution'] ?? [],
-            'family_details'        => $familyCardsData['family_details'] ?? [],
-            'address_information'   => $familyCardsData['address_information'] ?? [],
-            'regional_data'         => $familyCardsData['regional_data'] ?? [],
-            'member_demographics'   => $familyCardsData['member_demographics'] ?? [],
-            'admin_data'            => true,
-        ];
-    }
-
-    /**
-     * Preprocess asset data for admin consumption
-     * Organizes asset data with full details for admin use
-     */
-    private function preprocessAssetDataForAdmin($assetData)
-    {
-        if (isset($assetData['error'])) {
-            return $assetData;
-        }
-
-        return [
-            'total_assets'         => $assetData['total_assets'] ?? 0,
-            'asset_categories'     => $assetData['asset_categories'] ?? [],
-            'asset_status_summary' => $assetData['asset_status_summary'] ?? [],
-            'asset_details'        => $assetData['asset_details'] ?? [],
-            'asset_locations'      => $assetData['asset_locations'] ?? [],
-            'asset_conditions'     => $assetData['asset_conditions'] ?? [],
-            'asset_values'         => $assetData['asset_values'] ?? [],
-            'full_categorization'  => $assetData['full_categorization'] ?? [],
-            'admin_data'           => true,
-        ];
-    }
-
-    /**
-     * Preprocess asset loan data for admin consumption
-     * Organizes asset loan data with borrower information for admin use
-     */
-    private function preprocessAssetLoanDataForAdmin($assetLoanData)
-    {
-        if (isset($assetLoanData['error'])) {
-            return $assetLoanData;
-        }
-
-        return [
-            'total_active_loans'    => $assetLoanData['total_active_loans'] ?? 0,
-            'total_completed_loans' => $assetLoanData['total_completed_loans'] ?? 0,
-            'loan_statistics'       => $assetLoanData['loan_statistics'] ?? [],
-            'borrower_information'  => $assetLoanData['borrower_information'] ?? [],
-            'loan_details'          => $assetLoanData['loan_details'] ?? [],
-            'loan_history'          => $assetLoanData['loan_history'] ?? [],
-            'overdue_loans'         => $assetLoanData['overdue_loans'] ?? [],
-            'loan_trends'           => $assetLoanData['loan_trends'] ?? [],
-            'admin_data'            => true,
         ];
     }
 
