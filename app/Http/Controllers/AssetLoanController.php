@@ -143,7 +143,7 @@ class AssetLoanController extends Controller
 
         if ($asset->available_stock < $request->quantity) {
             return ApiResponse::error(
-                'Not enough available stock',
+                'Validation failed.',
                 ['quantity' => ['Not enough available stock']]
             );
         }
@@ -175,7 +175,7 @@ class AssetLoanController extends Controller
 
         if ($loan->loan_status !== AssetLoan::STATUS_REQUESTED) {
             return APIResponse::error(
-                'Invalid loan status',
+                'Validation failed.',
                 ['loan_status' => ['Only requested loans can be approved']],
             );
         }
@@ -184,7 +184,7 @@ class AssetLoanController extends Controller
 
         if ($asset->available_stock < $loan->quantity) {
             return APIResponse::error(
-                'The requested quantity exceeds the available stock.',
+                'Validation failed.',
                 ['available_stock' => ['Not enough available stock'],],
             );
         }
@@ -212,7 +212,7 @@ class AssetLoanController extends Controller
 
         if ($loan->loan_status !== AssetLoan::STATUS_BORROWED) {
             return ApiResponse::error(
-                'Invalid loan status',
+                'Validation failed.',
                 ['loan_status' => ['Only borrowed loans can be returned']],
             );
         }
@@ -251,7 +251,7 @@ class AssetLoanController extends Controller
 
         if ($loan->loan_status !== AssetLoan::STATUS_REQUESTED) {
             return APIResponse::error(
-                'Invalid loan status',
+                'Validation failed.',
                 ['loan_status' => ['Only requested loans can be rejected']],
             );
         }
