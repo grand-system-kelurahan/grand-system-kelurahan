@@ -20,41 +20,61 @@ class RegionController extends Controller
     {
         try {
             $query = Region::withCount('residents');
+            $withPagination = $request->get('with_pagination', 'true') === 'true';
 
-
+            // Search
             if ($request->has('search') && $request->search != '') {
                 $search = $request->search;
                 $query->where('name', 'like', "%{$search}%");
             }
 
-
+            // Sorting
             $sortField = $request->get('sort_by', 'created_at');
             $sortDirection = $request->get('sort_dir', 'desc');
+
+            $allowedSortFields = ['id', 'name', 'created_at', 'updated_at'];
+            if (!in_array($sortField, $allowedSortFields)) {
+                $sortField = 'created_at';
+            }
+
+            if (!in_array(strtolower($sortDirection), ['asc', 'desc'])) {
+                $sortDirection = 'desc';
+            }
+
             $query->orderBy($sortField, $sortDirection);
 
+            // Pagination logic
+            if ($withPagination) {
+                $perPage = (int) $request->get('per_page', 20);
+                $page = (int) $request->get('page', 1);
 
-            $perPage = $request->get('per_page', 20);
-            $regions = $query->paginate($perPage);
+                $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+                $paginator->appends($request->query());
+
+                $data = [
+                    'regions' => $paginator->items(),
+                    'meta' => [
+                        'current_page' => $paginator->currentPage(),
+                        'last_page' => $paginator->lastPage(),
+                        'per_page' => $paginator->perPage(),
+                        'total' => $paginator->total(),
+                        'from' => $paginator->firstItem(),
+                        'to' => $paginator->lastItem(),
+                    ],
+                    'links' => [
+                        'first' => $paginator->url(1),
+                        'last' => $paginator->url($paginator->lastPage()),
+                        'prev' => $paginator->previousPageUrl(),
+                        'next' => $paginator->nextPageUrl(),
+                    ]
+                ];
+            } else {
+                $data = $query->get();
+            }
 
             return ApiResponse::success(
                 'Data fetched successfully',
-                [
-                    'regions' => $regions->items(),
-                    'meta' => [
-                        'current_page' => $regions->currentPage(),
-                        'last_page' => $regions->lastPage(),
-                        'per_page' => $regions->perPage(),
-                        'total' => $regions->total(),
-                        'from' => $regions->firstItem(),
-                        'to' => $regions->lastItem(),
-                    ],
-                    'links' => [
-                        'first' => $regions->url(1),
-                        'last' => $regions->url($regions->lastPage()),
-                        'prev' => $regions->previousPageUrl(),
-                        'next' => $regions->nextPageUrl(),
-                    ]
-                ]
+                $data
             );
         } catch (\Exception $e) {
             return ApiResponse::error(

@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreResidentRequest;
-use App\Http\Requests\UpdateResidentRequest;
 use App\Models\Region;
 use App\Models\Resident;
 use Illuminate\Http\Request;
@@ -22,6 +20,7 @@ class ResidentController extends Controller
     {
         try {
             $query = Resident::query();
+            $withPagination = $request->get('with_pagination', 'true') === 'true';
 
             if ($request->filled('ids')) {
                 $ids = $request->ids;
@@ -59,55 +58,69 @@ class ResidentController extends Controller
                 $query->where('gender', $request->gender);
             }
 
+            // Sorting dengan validasi
             $sortField = $request->get('sort_by', 'created_at');
             $sortDirection = $request->get('sort_dir', 'desc');
-            $query->orderBy($sortField, $sortDirection);
 
-            $withPagination = filter_var(
-                $request->get('with_pagination', true),
-                FILTER_VALIDATE_BOOLEAN
-            );
+            $allowedSortFields = [
+                'id',
+                'name',
+                'national_number_id',
+                'gender',
+                'rt',
+                'rw',
+                'region_id',
+                'created_at',
+                'updated_at'
+            ];
 
-            if (!$withPagination) {
-                $residents = $query->get();
-
-
-                $residents = $this->enrichResidentsWithRegions($residents, $regionServiceClient);
-
-                return ApiResponse::success(
-                    'Data fetched successfully',
-                    [
-                        'residents' => $residents,
-                    ]
-                );
+            if (!in_array($sortField, $allowedSortFields)) {
+                $sortField = 'created_at';
             }
 
-            $perPage = $request->get('per_page', 20);
-            $page = $request->get('page', 1);
+            if (!in_array(strtolower($sortDirection), ['asc', 'desc'])) {
+                $sortDirection = 'desc';
+            }
 
-            $residents = $query->paginate($perPage, ['*'], 'page', $page);
+            $query->orderBy($sortField, $sortDirection);
 
-            $residents = $this->enrichResidentsWithRegions($residents, $regionServiceClient, true);
+            // Pagination logic
+            if ($withPagination) {
+                $perPage = (int) $request->get('per_page', 20);
+                $page = (int) $request->get('page', 1);
+
+                $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+                $paginator->appends($request->query());
+
+                $residents = $this->enrichResidentsWithRegions($paginator, $regionServiceClient, true);
+
+                $data = [
+                    'residents' => $paginator->items(),
+                    'meta' => [
+                        'current_page' => $paginator->currentPage(),
+                        'last_page' => $paginator->lastPage(),
+                        'per_page' => $paginator->perPage(),
+                        'total' => $paginator->total(),
+                        'from' => $paginator->firstItem(),
+                        'to' => $paginator->lastItem(),
+                    ],
+                    'links' => [
+                        'first' => $paginator->url(1),
+                        'last' => $paginator->url($paginator->lastPage()),
+                        'prev' => $paginator->previousPageUrl(),
+                        'next' => $paginator->nextPageUrl(),
+                    ]
+                ];
+            } else {
+                $residents = $query->get();
+                $residents = $this->enrichResidentsWithRegions($residents, $regionServiceClient);
+
+                $data = $residents;
+            }
 
             return ApiResponse::success(
                 'Data fetched successfully',
-                [
-                    'residents' => $residents->items(),
-                    'meta' => [
-                        'current_page' => $residents->currentPage(),
-                        'last_page' => $residents->lastPage(),
-                        'per_page' => $residents->perPage(),
-                        'total' => $residents->total(),
-                        'from' => $residents->firstItem(),
-                        'to' => $residents->lastItem(),
-                    ],
-                    'links' => [
-                        'first' => $residents->url(1),
-                        'last' => $residents->url($residents->lastPage()),
-                        'prev' => $residents->previousPageUrl(),
-                        'next' => $residents->nextPageUrl(),
-                    ]
-                ]
+                $data
             );
         } catch (\Exception $e) {
             return ApiResponse::error(
@@ -124,27 +137,34 @@ class ResidentController extends Controller
     private function enrichResidentsWithRegions($residents, RegionServiceClient $regionServiceClient, bool $isPaginated = false)
     {
         if ($isPaginated) {
-            $residentsCollection = $residents->getCollection();
+            $collection = $residents->getCollection();
         } else {
-            $residentsCollection = $residents;
+            $collection = $residents;
         }
 
-        $regionIds = $residentsCollection
-            ->pluck('region_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
+        // Group residents by region_id untuk batch processing
+        $residentsByRegionId = $collection->groupBy('region_id');
 
-        $regions = [];
-        if (!empty($regionIds)) {
-            $regions = $regionServiceClient->findByIds($regionIds);
-            $regions = collect($regions)->keyBy('id')->toArray();
+        $allRegions = [];
+
+        foreach ($residentsByRegionId as $regionId => $regionResidents) {
+            if (!$regionId) {
+                continue;
+            }
+
+            // Fetch region data
+            $regionData = $regionServiceClient->findById($regionId);
+
+            if ($regionData) {
+                $allRegions[$regionId] = $regionData;
+            }
         }
 
+        // Attach region data ke setiap resident
+        $collection->transform(function ($resident) use ($allRegions) {
+            $resident->region = $allRegions[$resident->region_id] ?? null;
 
-        $residentsCollection->transform(function ($resident) use ($regions) {
-            $resident->region = $regions[$resident->region_id] ?? null;
+            // Load family member
             if (!isset($resident->familyMember)) {
                 $resident->load('familyMember');
             }
@@ -153,11 +173,11 @@ class ResidentController extends Controller
         });
 
         if ($isPaginated) {
-            $residents->setCollection($residentsCollection);
+            $residents->setCollection($collection);
             return $residents;
         }
 
-        return $residentsCollection;
+        return $collection;
     }
 
     /**
@@ -390,69 +410,275 @@ class ResidentController extends Controller
     /**
      * Get resident statistics
      */
-    public function statistics(): JsonResponse
+    public function statistics(Request $request): JsonResponse
     {
         try {
-            $total = Resident::count();
-            $male = Resident::where('gender', 'Laki-laki')->count();
-            $female = Resident::where('gender', 'Perempuan')->count();
+            $baseQuery = $this->buildBaseQuery($request);
+            $total = $baseQuery->count();
 
-            $religionStats = Resident::selectRaw('religion, COUNT(*) as total')
-                ->groupBy('religion')
-                ->get()
-                ->mapWithKeys(function ($item) {
-                    return [$item->religion => $item->total];
-                });
+            // Hitung statistik utama dalam fungsi terpisah
+            $genderStats = $this->getGenderStatistics($baseQuery, $total);
+            $ageStats = $this->getAgeStatistics($baseQuery);
+            $religionStats = $this->getReligionStatistics($baseQuery, $total);
+            $maritalStats = $this->getMaritalStatistics($baseQuery, $total);
+            $educationStats = $this->getEducationStatistics($baseQuery, $total);
+            $occupationStats = $this->getOccupationStatistics($baseQuery, $total);
+            $geographicalStats = $this->getGeographicalStatistics($baseQuery);
 
-            $maritalStats = Resident::selectRaw('marital_status, COUNT(*) as total')
-                ->groupBy('marital_status')
-                ->get()
-                ->mapWithKeys(function ($item) {
-                    return [$item->marital_status => $item->total];
-                });
-
-            $educationStats = Resident::selectRaw('education, COUNT(*) as total')
-                ->groupBy('education')
-                ->get()
-                ->mapWithKeys(function ($item) {
-                    return [$item->education => $item->total];
-                });
-
-            $ageDistribution = [
-                '0-17' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 0 AND 17')->count(),
-                '18-30' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 18 AND 30')->count(),
-                '31-45' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 31 AND 45')->count(),
-                '46-60' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 46 AND 60')->count(),
-                '60+' => Resident::whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) > 60')->count(),
+            // Data ringkasan
+            $summary = [
+                'total_residents' => $total,
+                'average_age' => $ageStats['average_age'],
+                'min_age' => $ageStats['min_age'],
+                'max_age' => $ageStats['max_age'],
+                'total_rt' => $geographicalStats['total_rt'],
+                'total_rw' => $geographicalStats['total_rw'],
             ];
 
             return ApiResponse::success(
-                'Data fetched successfully',
+                'Data statistik berhasil diambil',
                 [
-                    'total' => $total,
-                    'gender_distribution' => [
-                        'male' => $male,
-                        'female' => $female,
-                        'male_percentage' => $total > 0 ? round(($male / $total) * 100, 2) : 0,
-                        'female_percentage' => $total > 0 ? round(($female / $total) * 100, 2) : 0,
-                    ],
+                    'summary' => $summary,
+                    'gender_distribution' => $genderStats,
+                    'age_analysis' => $ageStats,
                     'religion_stats' => $religionStats,
                     'marital_stats' => $maritalStats,
                     'education_stats' => $educationStats,
-                    'age_distribution' => $ageDistribution,
-                    'rt_rw_summary' => [
-                        'total_rt' => Resident::distinct('rt')->count('rt'),
-                        'total_rw' => Resident::distinct('rw')->count('rw'),
-                    ]
+                    'occupation_stats' => $occupationStats,
+                    'geographical_distribution' => $geographicalStats,
                 ]
             );
         } catch (\Exception $e) {
+
             return ApiResponse::error(
-                'Failed to get statistics',
+                'Gagal mengambil data statistik',
                 $e->getMessage(),
                 500
             );
         }
+    }
+
+    /**
+     * Build base query dengan filter
+     */
+    private function buildBaseQuery(Request $request)
+    {
+        $query = Resident::query();
+
+        if ($request->has('region_id')) {
+            $query->where('region_id', $request->region_id);
+        }
+
+        if ($request->has('rt')) {
+            $query->where('rt', $request->rt);
+        }
+
+        if ($request->has('rw')) {
+            $query->where('rw', $request->rw);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Get gender statistics
+     */
+    private function getGenderStatistics($query, $total)
+    {
+        $maleQuery = clone $query;
+        $male = $maleQuery->where('gender', 'male')->count();
+        $female = $total - $male;
+
+        return [
+            'male' => [
+                'count' => $male,
+                'percentage' => $total > 0 ? round(($male / $total) * 100, 2) : 0
+            ],
+            'female' => [
+                'count' => $female,
+                'percentage' => $total > 0 ? round(($female / $total) * 100, 2) : 0
+            ]
+        ];
+    }
+
+    /**
+     * Get age statistics
+     */
+    private function getAgeStatistics($query)
+    {
+        // Age distribution
+        $distribution = [
+            '0-17' => $query->clone()->whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 0 AND 17')->count(),
+            '18-30' => $query->clone()->whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 18 AND 30')->count(),
+            '31-45' => $query->clone()->whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 31 AND 45')->count(),
+            '46-60' => $query->clone()->whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) BETWEEN 46 AND 60')->count(),
+            '60+' => $query->clone()->whereRaw('TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) > 60')->count(),
+        ];
+
+        // Age summary
+        $summaryQuery = clone $query;
+        $ageSummary = $summaryQuery->selectRaw('
+        AVG(TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE())) as avg_age,
+        MIN(TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE())) as min_age,
+        MAX(TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE())) as max_age
+    ')->first();
+
+        return [
+            'distribution' => $distribution,
+            'average_age' => round($ageSummary->avg_age ?? 0, 1),
+            'min_age' => $ageSummary->min_age ?? 0,
+            'max_age' => $ageSummary->max_age ?? 0,
+            'age_groups' => [
+                'children_teenagers' => $distribution['0-17'],
+                'young_adults' => $distribution['18-30'],
+                'adults' => $distribution['31-45'],
+                'middle_aged' => $distribution['46-60'],
+                'seniors' => $distribution['60+'],
+            ]
+        ];
+    }
+
+    /**
+     * Get religion statistics - FIXED: tanpa ORDER BY dengan alias
+     */
+    private function getReligionStatistics($query, $total)
+    {
+        // Get data tanpa ORDER BY dulu
+        $religionData = $query->selectRaw('religion, COUNT(*) as religion_count')
+            ->groupBy('religion')
+            ->get();
+
+        // Sort manually di PHP
+        $religionData = $religionData->sortByDesc('religion_count');
+
+        $result = [];
+
+        foreach ($religionData as $item) {
+            $percentage = $total > 0 ? round(($item->religion_count / $total) * 100, 2) : 0;
+            $result[$item->religion] = [
+                'count' => $item->religion_count,
+                'percentage' => $percentage
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get marital status statistics - FIXED: tanpa ORDER BY dengan alias
+     */
+    private function getMaritalStatistics($query, $total)
+    {
+        $maritalData = $query->selectRaw('marital_status, COUNT(*) as marital_count')
+            ->groupBy('marital_status')
+            ->get();
+
+        // Sort manually di PHP
+        $maritalData = $maritalData->sortByDesc('marital_count');
+
+        $result = [];
+
+        foreach ($maritalData as $item) {
+            $percentage = $total > 0 ? round(($item->marital_count / $total) * 100, 2) : 0;
+            $result[$item->marital_status] = [
+                'count' => $item->marital_count,
+                'percentage' => $percentage
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get education statistics - FIXED: tanpa ORDER BY dengan alias
+     */
+    private function getEducationStatistics($query, $total)
+    {
+        $educationData = $query->selectRaw('education, COUNT(*) as education_count')
+            ->groupBy('education')
+            ->get();
+
+        // Sort manually di PHP
+        $educationData = $educationData->sortByDesc('education_count');
+
+        $result = [];
+
+        foreach ($educationData as $item) {
+            $percentage = $total > 0 ? round(($item->education_count / $total) * 100, 2) : 0;
+            $result[$item->education] = [
+                'count' => $item->education_count,
+                'percentage' => $percentage
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get occupation statistics - FIXED: tanpa ORDER BY dengan alias
+     */
+    private function getOccupationStatistics($query, $total)
+    {
+        $occupationData = $query->selectRaw('occupation, COUNT(*) as occupation_count')
+            ->whereNotNull('occupation')
+            ->where('occupation', '!=', '')
+            ->groupBy('occupation')
+            ->get();
+
+        // Sort dan limit manually di PHP
+        $occupationData = $occupationData->sortByDesc('occupation_count')->take(10);
+
+        $result = [];
+
+        foreach ($occupationData as $item) {
+            $percentage = $total > 0 ? round(($item->occupation_count / $total) * 100, 2) : 0;
+            $result[$item->occupation] = [
+                'count' => $item->occupation_count,
+                'percentage' => $percentage
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get geographical statistics - FIXED: query sederhana
+     */
+    private function getGeographicalStatistics($query)
+    {
+        // Query terpisah untuk count distinct tanpa conflict
+        $rtQuery = clone $query;
+        $rwQuery = clone $query;
+
+        $rtCount = $rtQuery->distinct()->count('rt');
+        $rwCount = $rwQuery->distinct()->count('rw');
+
+        // RT distribution - tanpa ORDER BY dengan alias
+        $rtDataRaw = $query->clone()->selectRaw('rt, COUNT(*) as rt_count')
+            ->groupBy('rt')
+            ->orderBy('rt') // Order by rt (string), bukan count
+            ->get();
+
+        $rtData = $rtDataRaw->mapWithKeys(function ($item) {
+            return [$item->rt => $item->rt_count];
+        });
+
+        // RW distribution - tanpa ORDER BY dengan alias
+        $rwDataRaw = $query->clone()->selectRaw('rw, COUNT(*) as rw_count')
+            ->groupBy('rw')
+            ->orderBy('rw') // Order by rw (string), bukan count
+            ->get();
+
+        $rwData = $rwDataRaw->mapWithKeys(function ($item) {
+            return [$item->rw => $item->rw_count];
+        });
+
+        return [
+            'total_rt' => $rtCount,
+            'total_rw' => $rwCount,
+            'rt_distribution' => $rtData,
+            'rw_distribution' => $rwData,
+        ];
     }
 
     /**

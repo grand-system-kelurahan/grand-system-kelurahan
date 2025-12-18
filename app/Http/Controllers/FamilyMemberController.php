@@ -166,7 +166,6 @@ class FamilyMemberController extends Controller
                         'family_address' => $familyMember->familyCard->address
                     ],
                     'resident_info' => [
-                        'age' => $familyMember->resident->age,
                         'gender' => $familyMember->resident->gender,
                         'occupation' => $familyMember->resident->occupation
                     ]

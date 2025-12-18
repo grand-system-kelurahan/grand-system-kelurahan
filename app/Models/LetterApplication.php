@@ -17,8 +17,10 @@ class LetterApplication extends Model
         'approval_date',
         'status',
         'description',
-        'approved_by_employee_id',
-        'approved_by_employee_name'
+        'submitted_by',
+        'approved_by',
+        // 'approved_by_employee_id',
+        // 'approved_by_employee_name'
     ];
 
     public function letterType()

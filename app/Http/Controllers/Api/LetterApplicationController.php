@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LetterApplication;
 use App\Models\LetterType;
 use Illuminate\Http\Request;
+use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class LetterApplicationController extends Controller
 {
@@ -16,7 +17,10 @@ class LetterApplicationController extends Controller
     {
         $applications = LetterApplication::with(['resident', 'letterType'])->get();
 
-        return response()->json($applications);
+        return ApiResponse::success(
+            "Data fetched successfully",
+            ["letter_applications" => $applications]
+        );
     }
 
     /**
@@ -27,6 +31,7 @@ class LetterApplicationController extends Controller
         $data = $request->validate([
             'resident_id' => 'required|exists:residents,id',
             'letter_type_id' => 'required|exists:letter_types,id',
+            'submitted_by' => 'required|exists:users,id',
             'description' => 'nullable|string',
         ]);
 
@@ -35,7 +40,11 @@ class LetterApplicationController extends Controller
 
         $application = LetterApplication::create($data);
 
-        return response()->json($application, 201);
+        return ApiResponse::success(
+            "Data fetched successfully",
+            ["letter_application" => $application],
+            201
+        );
     }
 
     /**
@@ -45,7 +54,31 @@ class LetterApplicationController extends Controller
     {
         $application = LetterApplication::with(['resident', 'letterType'])->findOrFail($id);
 
-        return response()->json($application);
+        return ApiResponse::success(
+            "Data fetched successfully",
+            ["letter_application" => $application],
+        );
+    }
+
+    public function getLetterApplicationsByUserId(string $id)
+    {
+        try {
+            $applications = LetterApplication::with(['resident', 'letterType'])
+                ->where('submitted_by', $id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return ApiResponse::success(
+                "Data fetched successfully",
+                ["letter_applications" => $applications]
+            );
+        } catch (\Exception $e) {
+            return ApiResponse::error(
+                "Failed to fetch data",
+                $e->getMessage(),
+                500
+            );
+        }
     }
 
     /**
@@ -94,19 +127,26 @@ class LetterApplicationController extends Controller
 
         // validasi data approver
         $data = $request->validate([
-            'approved_by_employee_id' => 'required|string|max:64',
-            'approved_by_employee_name' => 'required|string|max:100',
+            // 'approved_by_employee_id' => 'required|string|max:64',
+            // 'approved_by_employee_name' => 'required|string|max:100',
+            'approved_by' => 'required|number|exists:users,id',
         ]);
 
         $application->update([
             'status' => 'approved',
             'approval_date' => now()->toDateString(),
             'letter_number' => $this->generateLetterNumber($application),
-            'approved_by_employee_id' => $data['approved_by_employee_id'],
-            'approved_by_employee_name' => $data['approved_by_employee_name']
+            'approved_by' => $data['approved_by'],
+            // 'approved_by_employee_id' => $data['approved_by_employee_id'],
+            // 'approved_by_employee_name' => $data['approved_by_employee_name']
         ]);
 
-        return response()->json($application);
+        return ApiResponse::success(
+            'Data updated successfully',
+            [
+                'application' => $application->fresh()
+            ]
+        );
     }
 
     public function reject(Request $request, $id)

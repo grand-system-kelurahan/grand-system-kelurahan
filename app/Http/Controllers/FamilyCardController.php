@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreFamilyCardRequest;
 use App\Http\Requests\UpdateFamilyCardRequest;
 use App\Models\FamilyCard;
 use App\Models\FamilyMember;
@@ -14,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 use App\Services\Region\RegionServiceClient;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class FamilyCardController extends Controller
@@ -24,15 +24,15 @@ class FamilyCardController extends Controller
     public function index(Request $request, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
-            $query = FamilyCard::with(['familyMembers.resident']); // Hapus 'region'
+            $query = FamilyCard::with(['familyMembers.resident']);
+            $withPagination = $request->get('with_pagination', 'true') === 'true';
 
             // Filtering
             if ($request->has('search') && $request->search != '') {
                 $search = $request->search;
-                $query->where(function ($q) use ($search, $regionServiceClient) {
+                $query->where(function ($q) use ($search) {
                     $q->where('head_of_family_name', 'like', "%{$search}%")
                         ->orWhere('address', 'like', "%{$search}%")
-                        // Hapus filter berdasarkan region name karena perlu API call
                         ->orWhereHas('familyMembers.resident', function ($q) use ($search) {
                             $q->where('name', 'like', "%{$search}%");
                         });
@@ -51,39 +51,89 @@ class FamilyCardController extends Controller
                 $query->whereDate('publication_date', '<=', $request->publication_date_to);
             }
 
-            // Sorting
+            // Sorting dengan validasi
             $sortField = $request->get('sort_by', 'created_at');
             $sortDirection = $request->get('sort_dir', 'desc');
+
+            $allowedSortFields = [
+                'id',
+                'family_card_number',
+                'head_of_family_name',
+                'address',
+                'region_id',
+                'publication_date',
+                'created_at',
+                'updated_at'
+            ];
+
+            if (!in_array($sortField, $allowedSortFields)) {
+                $sortField = 'created_at';
+            }
+
+            if (!in_array(strtolower($sortDirection), ['asc', 'desc'])) {
+                $sortDirection = 'desc';
+            }
+
             $query->orderBy($sortField, $sortDirection);
 
-            // Pagination
-            $perPage = $request->get('per_page', 20);
-            $familyCards = $query->paginate($perPage);
+            // Pagination logic
+            if ($withPagination) {
+                $perPage = (int) $request->get('per_page', 20);
+                $page = (int) $request->get('page', 1);
 
-            // Enrich family cards with region data
-            $familyCards = $this->enrichFamilyCardsWithRegions($familyCards, $regionServiceClient);
+                $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+                $paginator->appends($request->query());
 
-            // Hitung total anggota per keluarga
-            $familyCards->getCollection()->transform(function ($familyCard) {
-                $familyCard->total_members = $familyCard->familyMembers()->count();
-                return $familyCard;
-            });
+                // Enrich family cards with region data (untuk paginated)
+                $paginator = $this->enrichFamilyCardsWithRegions($paginator, $regionServiceClient, true);
+
+                // Hitung total anggota per keluarga
+                $paginator->getCollection()->transform(function ($familyCard) {
+                    $familyCard->total_members = $familyCard->familyMembers()->count();
+                    return $familyCard;
+                });
+
+                $data = [
+                    'family_cards' => $paginator->items(),
+                    'meta' => [
+                        'current_page' => $paginator->currentPage(),
+                        'last_page' => $paginator->lastPage(),
+                        'per_page' => $paginator->perPage(),
+                        'total' => $paginator->total(),
+                        'from' => $paginator->firstItem(),
+                        'to' => $paginator->lastItem(),
+                    ],
+                    'links' => [
+                        'first' => $paginator->url(1),
+                        'last' => $paginator->url($paginator->lastPage()),
+                        'prev' => $paginator->previousPageUrl(),
+                        'next' => $paginator->nextPageUrl(),
+                    ]
+                ];
+            } else {
+                $familyCards = $query->get();
+
+                // Enrich family cards with region data (untuk non-paginated)
+                $familyCards = $this->enrichFamilyCardsWithRegions($familyCards, $regionServiceClient, false);
+
+                // Hitung total anggota per keluarga
+                $familyCards->transform(function ($familyCard) {
+                    $familyCard->total_members = $familyCard->familyMembers()->count();
+                    return $familyCard;
+                });
+
+                $data = $familyCards;
+            }
 
             return ApiResponse::success(
                 'Data fetched successfully',
-                [
-                    'family_cards' => $familyCards->items(),
-                    'meta' => [
-                        'current_page' => $familyCards->currentPage(),
-                        'last_page' => $familyCards->lastPage(),
-                        'per_page' => $familyCards->perPage(),
-                        'total' => $familyCards->total(),
-                        'from' => $familyCards->firstItem(),
-                        'to' => $familyCards->lastItem(),
-                    ]
-                ]
+                $data
             );
         } catch (\Exception $e) {
+            // Tambahkan logging untuk debug
+            Log::error('Error in FamilyCardController@index: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+
             return ApiResponse::error(
                 'Failed to fetch data',
                 $e->getMessage(),
@@ -94,14 +144,12 @@ class FamilyCardController extends Controller
 
     /**
      * Enrich family cards with region data from API
+     * @param mixed $familyCards Paginator instance atau Collection
      */
     private function enrichFamilyCardsWithRegions($familyCards, RegionServiceClient $regionServiceClient, bool $isPaginated = true)
     {
-        if ($isPaginated) {
-            $collection = $familyCards->getCollection();
-        } else {
-            $collection = $familyCards;
-        }
+        // Ambil collection berdasarkan tipe
+        $collection = $isPaginated ? $familyCards->getCollection() : $familyCards;
 
         // Extract unique region IDs from family cards
         $regionIds = $collection
@@ -126,6 +174,7 @@ class FamilyCardController extends Controller
             return $familyCard;
         });
 
+        // Kembalikan sesuai tipe
         if ($isPaginated) {
             $familyCards->setCollection($collection);
             return $familyCards;
@@ -238,7 +287,6 @@ class FamilyCardController extends Controller
                         'national_number_id' => $member->resident->national_number_id,
                         'gender' => $member->resident->gender,
                         'date_of_birth' => $member->resident->date_of_birth,
-                        'age' => $member->resident->age ?? now()->diffInYears($member->resident->date_of_birth),
                         'region_id' => $member->resident->region_id,
                         'region' => $residentRegionData ? [
                             'id' => $residentRegionData['id'] ?? null,
@@ -266,8 +314,8 @@ class FamilyCardController extends Controller
                         ] : null,
                         'created_at' => $familyCard->created_at->format('Y-m-d H:i:s'),
                         'updated_at' => $familyCard->updated_at->format('Y-m-d H:i:s'),
+                        'family_members' => $familyMembers,
                     ],
-                    'family_members' => $familyMembers,
                     'statistics' => [
                         'total_members' => $totalMembers,
                         'members_by_gender' => $membersByGender,

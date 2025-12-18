@@ -35,27 +35,54 @@ class RegionServiceClient
      */
     public function findByIds(array $ids): array
     {
-        $request = Request::create(
-            '/api/regions',
-            'GET',
-            [
-                'ids' => implode(',', $ids),
-                'with_pagination' => false,
-            ]
-        );
+        if (empty($ids)) {
+            return [];
+        }
 
-        $response = Route::dispatch($request);
-        $data = json_decode($response->getContent(), true);
+        try {
+            $request = Request::create(
+                '/api/regions',
+                'GET',
+                [
+                    'ids' => implode(',', $ids),
+                    'with_pagination' => false,
+                ]
+            );
 
-        $regions = data_get($data, 'data.regions', []);
+            $response = Route::dispatch($request);
 
-        return collect($regions)->map(function ($region) {
 
-            return [
-                'id' => data_get($region, 'id'),
-                'name' => data_get($region, 'name'),
-                'encoded_geometry' => data_get($region, 'encoded_geometry'),
-            ];
-        })->values()->toArray();
+            if ($response->getStatusCode() !== 200) {
+                return [];
+            }
+
+            $data = json_decode($response->getContent(), true);
+
+
+            // Handle response format
+            $regions = [];
+            if (isset($data['data']['regions']) && is_array($data['data']['regions'])) {
+                $regions = $data['data']['regions'];
+            } elseif (isset($data['data']) && is_array($data['data'])) {
+                $regions = $data['data']; // Assuming it's already regions array
+            }
+
+            // Map ke format yang diharapkan
+            $result = [];
+            foreach ($regions as $region) {
+                if (isset($region['id'])) {
+                    $result[$region['id']] = [
+                        'id' => $region['id'],
+                        'name' => $region['name'] ?? null,
+                        'encoded_geometry' => $region['encoded_geometry'] ?? null,
+                    ];
+                }
+            }
+
+
+            return $result;
+        } catch (\Exception $e) {
+            return [];
+        }
     }
 }
