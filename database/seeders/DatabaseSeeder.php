@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             FamilyMemberSeeder::class,
             LetterTypeSeeder::class,
             LetterApplicationSeeder::class,
+            ResidentVerificationSeeder::class,
         ]);
     }
 }
