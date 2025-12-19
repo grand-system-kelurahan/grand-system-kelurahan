@@ -47,6 +47,10 @@ class AssetLoanController extends Controller
             $query->whereDate('loan_date', '<=', $request->to_date);
         }
 
+        if ($request->filled('asset_id')) {
+            $query->where('asset_id', $request->asset_id);
+        }
+
         // sorting
         $sortBy    = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
@@ -144,6 +148,13 @@ class AssetLoanController extends Controller
             return ApiResponse::error(
                 'Validation failed.',
                 ['quantity' => ['Not enough available stock']]
+            );
+        }
+
+        if ($asset->asset_status !== Asset::STATUS_ACTIVE) {
+            return ApiResponse::error(
+                'Validation failed.',
+                ['asset_status' => ['Asset is not active']],
             );
         }
 
