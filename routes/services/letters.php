@@ -18,5 +18,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/letter-applications/{id}', [LetterApplicationController::class, 'destroy']);
     Route::put('/letter-applications/{id}/approve', [LetterApplicationController::class, 'approve']);
     Route::put('/letter-applications/{id}/reject', [LetterApplicationController::class, 'reject']);
+
+
+    Route::get('/users/{id}/letter-applications', [LetterApplicationController::class, 'getLetterApplicationsByUserId']);
 });
-Route::get('/users/{id}/letter-applications', [LetterApplicationController::class, 'getLetterApplicationsByUserId']);

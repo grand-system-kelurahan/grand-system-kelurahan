@@ -17,14 +17,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/family-cards/{familyCard}/members', [FamilyMemberController::class, 'store']);
     Route::delete('/family-cards/{familyCard}/members/{familyMember}', [FamilyMemberController::class, 'destroy']);
     Route::put('/family-cards/{familyCard}/members/{familyMember}', [FamilyMemberController::class, 'update']);
-});
 
-Route::prefix('resident-verifications')->group(function () {
-    Route::get('/', [ResidentVerificationController::class, 'index']);
-    Route::get('/statistics', [ResidentVerificationController::class, 'statistics']);
-    Route::get('/{id}', [ResidentVerificationController::class, 'show']);
-    Route::post('/', [ResidentVerificationController::class, 'store']);
-    Route::post('/bulk', [ResidentVerificationController::class, 'bulkCreate']);
-    Route::put('/{id}/approve', [ResidentVerificationController::class, 'approve']);
-    Route::put('/{id}/reject', [ResidentVerificationController::class, 'reject']);
+    Route::prefix('resident-verifications')->group(function () {
+        Route::get('/', [ResidentVerificationController::class, 'index']);
+        Route::get('/statistics', [ResidentVerificationController::class, 'statistics']);
+        Route::get('/{id}', [ResidentVerificationController::class, 'show']);
+        Route::post('/', [ResidentVerificationController::class, 'store']);
+        Route::post('/bulk', [ResidentVerificationController::class, 'bulkCreate']);
+        Route::put('/{id}/approve', [ResidentVerificationController::class, 'approve']);
+        Route::put('/{id}/reject', [ResidentVerificationController::class, 'reject']);
+    });
 });
