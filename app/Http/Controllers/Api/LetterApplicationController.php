@@ -129,7 +129,7 @@ class LetterApplicationController extends Controller
         $data = $request->validate([
             // 'approved_by_employee_id' => 'required|string|max:64',
             // 'approved_by_employee_name' => 'required|string|max:100',
-            'approved_by' => 'required|number|exists:users,id',
+            'approved_by' => 'required|numeric|exists:users,id',
         ]);
 
         $application->update([
@@ -155,15 +155,12 @@ class LetterApplicationController extends Controller
 
         // validasi data approver
         $data = $request->validate([
-            'approved_by_employee_id' => 'required|string|max:64',
-            'approved_by_employee_name' => 'required|string|max:100',
+            'approved_by' => 'required|numeric|exists:users,id',
         ]);
 
         $application->update([
             'status'      => 'rejected',
-            'description' => $request->input('description', $application->description),
-            'approved_by_employee_id' => $data['approved_by_employee_id'],
-            'approved_by_employee_name' => $data['approved_by_employee_name']
+            'approved_by' => $data['approved_by'],
         ]);
 
         return response()->json($application);
