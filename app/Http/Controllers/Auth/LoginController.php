@@ -15,10 +15,12 @@ class LoginController extends Controller
     {
         try {
             $request->validate([
-                'name'     => 'required|string|max:255',
-                'username' => 'required|string|max:255|unique:users',
+                'name'     => 'required|string|max:255|regex:/^[\pL\s.]+$/u',
+                'username' => 'required|string|min:3|max:255|regex:/^[a-zA-Z0-9]+$/|unique:users',
                 'email'    => 'required|string|email|max:255|unique:users',
                 'password' => 'required|string|min:8',
+            ], [
+                'name.regex' => 'Name can only contain letters, spaces, and periods.'
             ]);
 
             $user = User::create([
@@ -37,12 +39,14 @@ class LoginController extends Controller
         } catch (ValidationException $e) {
             return ApiResponse::error(
                 'The given data was invalid.',
-                $e->errors()
+                $e->errors(),
+                422
             );
         } catch (\Exception $e) {
             return ApiResponse::error(
                 'Registration failed',
-                $e->getMessage()
+                $e->getMessage(),
+                500
             );
         }
     }
@@ -51,12 +55,13 @@ class LoginController extends Controller
     {
         try {
             $request->validate([
-                'username' => 'required|string',
-                'password' => 'required|string',
+                'username' => 'required|string|min:3|regex:/^[a-zA-Z0-9]+$/',
+                'password' => 'required|string|min:8',
+            ], [
+                'username.regex' => 'Username can only contain letters and numbers without spaces..'
             ]);
 
             $user = User::where('username', $request->username)
-                ->orWhere('email', $request->username)
                 ->first();
 
             if (! $user || ! Hash::check($request->password, $user->password)) {
@@ -92,7 +97,8 @@ class LoginController extends Controller
         } catch (\Exception $e) {
             return ApiResponse::error(
                 'Login failed',
-                $e->getMessage()
+                $e->getMessage(),
+                500
             );
         }
     }

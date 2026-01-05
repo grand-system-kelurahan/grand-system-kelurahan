@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 use App\Services\Region\RegionServiceClient;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class ResidentController extends Controller
 {
@@ -187,44 +188,59 @@ class ResidentController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'national_number_id'    => 'required|string',
-                'name'                  => 'required|string',
-                'gender'                => 'required|string',
-                'place_of_birth'        => 'required|string',
-                'date_of_birth'         => 'required|date',
-                'religion'              => 'required|string',
-                'rt'                    => 'required|string',
-                'rw'                    => 'required|string',
-                'education'             => 'required|string',
-                'occupation'            => 'required|string',
-                'marital_status'        => 'required|string',
-                'citizenship'           => 'required|string',
-                'blood_type'            => 'required|string',
+                'national_number_id'    => 'required|string|min:10|max:20|regex:/^[0-9]+$/|unique:residents',
+                'name'                  => 'required|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'gender'                => 'required|string|in:male,female',
+                'place_of_birth'        => 'required|string|min:3|max:255|regex:/^[\pL\s.,]+$/u',
+                'date_of_birth'         => 'required|date|before:today',
+                'religion'              => 'required|string|in:Islam,Kristen,Katolik,Hindu,Budha,Konghucu,Kepercayaan Terhadap Tuhan YME / Lainnya',
+                'rt'                    => 'required|string|size:3|regex:/^[0-9]{3}$/',
+                'rw'                    => 'required|string|size:3|regex:/^[0-9]{3}$/',
+                'education'             => 'required|string|in:Tidak / Belum Sekolah,Belum Tamat SD / Sederajat,Tamat SD / Sederajat,SLTP / Sederajat,SLTA / Sederajat,Diploma I / II,Akademi / Diploma III / S. Muda,Diploma IV / Strata I,Strata II,Strata III,Tidak Tau',
+                'occupation'            => 'required|string|min:3|max:255|regex:/^[\pL\s.,-]+$/u',
+                'marital_status'        => 'required|string|in:Belum Kawin,Kawin,Cerai Hidup,Cerai Mati,Tidak Tau',
+                'citizenship'           => 'required|string|in:WNI,WNA',
+                'blood_type'            => 'required|string|in:A,B,AB,O,A+,A-,B+,B-,AB+,AB-,O+,O-,Tidak Tau',
                 'disabilities'          => 'required|string',
-                'father_name'           => 'required|string',
-                'mother_name'           => 'required|string',
-                'region_id'             => 'required|numeric',
+                'father_name'           => 'required|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'mother_name'           => 'required|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'region_id'             => 'required|integer|min:1|exists:regions,id',
+            ], [
+                'national_number_id.regex' => 'The national number ID must contain only numbers without spaces.',
+                'name.regex' => 'The name field can only contain letters, spaces, and periods.',
+                'place_of_birth.regex' => 'The place of birth field can only contain letters, spaces, commas, and periods.',
+                'occupation.regex' => 'The occupation field can only contain letters, spaces, commas, hyphens, and periods.',
+                'father_name.regex' => 'The father name field can only contain letters, spaces, and periods.',
+                'mother_name.regex' => 'The mother name field can only contain letters, spaces, and periods.',
+                'rt.regex' => 'The RT field must contain exactly 3 digits.',
+                'rw.regex' => 'The RW field must contain exactly 3 digits.',
+                'date_of_birth.before' => 'The date of birth must be a date before today.',
+                'region_id.exists' => 'The selected region is invalid.',
             ]);
 
             if ($validator->fails()) {
-                return ApiResponse::error('Validation failed.', $validator->errors());
+                return ApiResponse::error('Validation failed.', $validator->errors(), 422);
             }
 
             $validated = $validator->validated();
 
-            $regionId = $validated['region_id'];
-            $region = Region::find($regionId);
-
-            if (!$region) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Region with id ' . $regionId . ' not found',
-                ], 404);
-            }
-
+            // Format date of birth
             if (isset($validated['date_of_birth'])) {
                 $validated['date_of_birth'] = date('Y-m-d', strtotime($validated['date_of_birth']));
             }
+
+            // Trim and clean up names
+            $validated['name'] = trim(preg_replace('/\s+/', ' ', $validated['name']));
+            $validated['father_name'] = trim(preg_replace('/\s+/', ' ', $validated['father_name']));
+            $validated['mother_name'] = trim(preg_replace('/\s+/', ' ', $validated['mother_name']));
+            $validated['place_of_birth'] = trim(preg_replace('/\s+/', ' ', $validated['place_of_birth']));
+            $validated['occupation'] = trim(preg_replace('/\s+/', ' ', $validated['occupation']));
+
+            // Capitalize appropriate fields
+            $validated['name'] = ucwords(strtolower($validated['name']));
+            $validated['father_name'] = ucwords(strtolower($validated['father_name']));
+            $validated['mother_name'] = ucwords(strtolower($validated['mother_name']));
+            $validated['place_of_birth'] = ucwords(strtolower($validated['place_of_birth']));
 
             $resident = Resident::create($validated);
 
@@ -247,9 +263,30 @@ class ResidentController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(int $id, RegionServiceClient $regionServiceClient): JsonResponse
+    public function show($id, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
+            // Validasi bahwa id harus angka
+            if (!is_numeric($id) || !ctype_digit((string)$id)) {
+                return ApiResponse::error(
+                    'Invalid ID format',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                );
+            }
+
+            // Konversi ke integer
+            $id = (int)$id;
+
+            // Validasi bahwa id harus positif
+            if ($id <= 0) {
+                return ApiResponse::error(
+                    'Invalid ID',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                );
+            }
+
             // Find resident by ID
             $resident = Resident::with('familyMember')->find($id);
 
@@ -284,7 +321,6 @@ class ResidentController extends Controller
             );
         }
     }
-
     /**
      * Transform resident data with region
      */
@@ -327,47 +363,109 @@ class ResidentController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Resident $resident): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         try {
+            // Validasi ID
+            $validation = $this->validateAndConvertId($id);
+            if (!$validation['success']) {
+                return $validation['error'];
+            }
+
+            $id = $validation['id'];
+
+            // Cari resident
+            $resident = Resident::find($id);
+
+            if (!$resident) {
+                return ApiResponse::error(
+                    'Resident not found',
+                    null,
+                    404
+                );
+            }
+
             $validator = Validator::make($request->all(), [
-                'national_number_id'    => 'sometimes|string',
-                'name'                  => 'sometimes|string',
-                'gender'                => 'sometimes|string',
-                'place_of_birth'        => 'sometimes|string',
-                'date_of_birth'         => 'sometimes|date',
-                'religion'              => 'sometimes|string',
-                'rt'                    => 'sometimes|string',
-                'rw'                    => 'sometimes|string',
-                'education'             => 'sometimes|string',
-                'occupation'            => 'sometimes|string',
-                'marital_status'        => 'sometimes|string',
-                'citizenship'           => 'sometimes|string',
-                'blood_type'            => 'sometimes|string',
+                'national_number_id'    => [
+                    'sometimes',
+                    'string',
+                    'min:10',
+                    'max:20',
+                    'regex:/^[0-9]+$/',
+                    Rule::unique('residents')->ignore($resident->id)
+                ],
+                'name'                  => 'sometimes|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'gender'                => 'sometimes|string|in:male,female',
+                'place_of_birth'        => 'sometimes|string|min:3|max:255|regex:/^[\pL\s.,]+$/u',
+                'date_of_birth'         => 'sometimes|date|before:today',
+                'religion'              => 'sometimes|string|in:Islam,Kristen,Katolik,Hindu,Budha,Konghucu,Kepercayaan Terhadap Tuhan YME / Lainnya',
+                'rt'                    => 'sometimes|string|size:3|regex:/^[0-9]{3}$/',
+                'rw'                    => 'sometimes|string|size:3|regex:/^[0-9]{3}$/',
+                'education'             => 'sometimes|string|in:Tidak / Belum Sekolah,Belum Tamat SD / Sederajat,Tamat SD / Sederajat,SLTP / Sederajat,SLTA / Sederajat,Diploma I / II,Akademi / Diploma III / S. Muda,Diploma IV / Strata I,Strata II,Strata III,Tidak Tau',
+                'occupation'            => 'sometimes|string|min:3|max:255|regex:/^[\pL\s.,-]+$/u',
+                'marital_status'        => 'sometimes|string|in:Belum Kawin,Kawin,Cerai Hidup,Cerai Mati,Tidak Tau',
+                'citizenship'           => 'sometimes|string|in:WNI,WNA',
+                'blood_type'            => 'sometimes|string|in:A,B,AB,O,A+,A-,B+,B-,AB+,AB-,O+,O-,Tidak Tau',
                 'disabilities'          => 'sometimes|string',
-                'father_name'           => 'sometimes|string',
-                'mother_name'           => 'sometimes|string',
-                'region_id'             => 'sometimes|numeric',
+                'father_name'           => 'sometimes|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'mother_name'           => 'sometimes|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'region_id'             => 'sometimes|integer|min:1|exists:regions,id',
+            ], [
+                'national_number_id.regex' => 'The national number ID must contain only numbers without spaces.',
+                'national_number_id.unique' => 'The national number ID has already been taken.',
+                'name.regex' => 'The name field can only contain letters, spaces, and periods.',
+                'place_of_birth.regex' => 'The place of birth field can only contain letters, spaces, commas, and periods.',
+                'occupation.regex' => 'The occupation field can only contain letters, spaces, commas, hyphens, and periods.',
+                'father_name.regex' => 'The father name field can only contain letters, spaces, and periods.',
+                'mother_name.regex' => 'The mother name field can only contain letters, spaces, and periods.',
+                'rt.regex' => 'The RT field must contain exactly 3 digits.',
+                'rw.regex' => 'The RW field must contain exactly 3 digits.',
+                'date_of_birth.before' => 'The date of birth must be a date before today.',
+                'region_id.exists' => 'The selected region is invalid.',
             ]);
 
             if ($validator->fails()) {
-                return ApiResponse::error('Validation failed.', $validator->errors());
+                return ApiResponse::error('Validation failed.', $validator->errors(), 422);
             }
 
             $validated = $validator->validated();
 
-            $regionId = $validated['region_id'];
-            $region = Region::find($regionId);
+            // Validasi region_id jika ada
+            if (isset($validated['region_id'])) {
+                $regionId = $validated['region_id'];
+                $region = Region::find($regionId);
 
-            if (!$region) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Region with id ' . $regionId . ' not found',
-                ], 404);
+                if (!$region) {
+                    return ApiResponse::error(
+                        'Region not found',
+                        ['region_id' => 'Region with id ' . $regionId . ' not found'],
+                        404
+                    );
+                }
             }
 
+            // Format date of birth jika ada
             if (isset($validated['date_of_birth'])) {
                 $validated['date_of_birth'] = date('Y-m-d', strtotime($validated['date_of_birth']));
+            }
+
+            // Trim dan format nama-nama jika ada
+            $fieldsToClean = ['name', 'place_of_birth', 'occupation', 'father_name', 'mother_name'];
+            foreach ($fieldsToClean as $field) {
+                if (isset($validated[$field])) {
+                    $validated[$field] = trim(preg_replace('/\s+/', ' ', $validated[$field]));
+                    if (in_array($field, ['name', 'father_name', 'mother_name', 'place_of_birth'])) {
+                        $validated[$field] = ucwords(strtolower($validated[$field]));
+                    }
+                }
+            }
+
+            // Update RT/RW dengan leading zero jika perlu
+            if (isset($validated['rt'])) {
+                $validated['rt'] = str_pad($validated['rt'], 3, '0', STR_PAD_LEFT);
+            }
+            if (isset($validated['rw'])) {
+                $validated['rw'] = str_pad($validated['rw'], 3, '0', STR_PAD_LEFT);
             }
 
             $resident->update($validated);
@@ -390,13 +488,34 @@ class ResidentController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Resident $resident): JsonResponse
+    public function destroy($id): JsonResponse
     {
         try {
+            // Validasi ID
+            $validation = $this->validateAndConvertId($id);
+            if (!$validation['success']) {
+                return $validation['error'];
+            }
+
+            $id = $validation['id'];
+
+            // Cari resident
+            $resident = Resident::find($id);
+
+            if (!$resident) {
+                return ApiResponse::error(
+                    'Resident not found',
+                    null,
+                    404
+                );
+            }
+
             $resident->delete();
+
             return ApiResponse::success(
                 'Data deleted successfully',
-                null
+                null,
+                200
             );
         } catch (\Exception $e) {
             return ApiResponse::error(
@@ -535,6 +654,41 @@ class ResidentController extends Controller
                 'middle_aged' => $distribution['46-60'],
                 'seniors' => $distribution['60+'],
             ]
+        ];
+    }
+
+    /**
+     * Validate and convert ID to integer
+     */
+    private function validateAndConvertId($id): array
+    {
+        if (!is_numeric($id)) {
+            return [
+                'success' => false,
+                'error' => ApiResponse::error(
+                    'Invalid ID format',
+                    ['id' => 'The ID must be a numeric value.'],
+                    422
+                )
+            ];
+        }
+
+        $id = (int)$id;
+
+        if ($id <= 0) {
+            return [
+                'success' => false,
+                'error' => ApiResponse::error(
+                    'Invalid ID',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                )
+            ];
+        }
+
+        return [
+            'success' => true,
+            'id' => $id
         ];
     }
 

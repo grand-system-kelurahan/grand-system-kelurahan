@@ -9,6 +9,7 @@ use App\Models\Region;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 
 class RegionController extends Controller
@@ -88,19 +89,24 @@ class RegionController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreRegionRequest $request): JsonResponse
     {
         try {
             $validator = Validator::make($request->all(), [
-                'name'              => 'required|string',
+                'name'              => 'required|string|min:3|max:100|regex:/^[\pL\s]+$/u|unique:regions',
                 'encoded_geometry'  => 'required|string',
+            ], [
+                'name.regex' => 'The name field can only contain letters and spaces.'
             ]);
 
             if ($validator->fails()) {
-                return ApiResponse::error('Validation failed.', $validator->errors());
+                return ApiResponse::error('Validation failed.', $validator->errors(), 422);
             }
 
             $validated = $validator->validated();
+
+            // Trim dan bersihkan spasi berlebih
+            $validated['name'] = trim(preg_replace('/\s+/', ' ', $validated['name']));
 
             $region = Region::create($validated);
 
@@ -110,6 +116,12 @@ class RegionController extends Controller
                     'region' => $region
                 ],
                 201
+            );
+        } catch (ValidationException $e) {
+            return ApiResponse::error(
+                'The given data was invalid.',
+                $e->errors(),
+                422
             );
         } catch (\Exception $e) {
             return ApiResponse::error(
