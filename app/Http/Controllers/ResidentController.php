@@ -87,7 +87,7 @@ class ResidentController extends Controller
 
             // Pagination logic
             if ($withPagination) {
-                $perPage = (int) $request->get('per_page', 20);
+                $perPage = (int) $request->get('per_page', 5);
                 $page = (int) $request->get('page', 1);
 
                 $paginator = $query->paginate($perPage, ['*'], 'page', $page);

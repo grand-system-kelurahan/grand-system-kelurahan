@@ -15,6 +15,7 @@ use Rickgoemans\LaravelApiResponseHelpers\ApiResponse;
 use App\Services\Region\RegionServiceClient;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class FamilyCardController extends Controller
 {
@@ -78,7 +79,7 @@ class FamilyCardController extends Controller
 
             // Pagination logic
             if ($withPagination) {
-                $perPage = (int) $request->get('per_page', 20);
+                $perPage = (int) $request->get('per_page', 5);
                 $page = (int) $request->get('page', 1);
 
                 $paginator = $query->paginate($perPage, ['*'], 'page', $page);
@@ -192,11 +193,11 @@ class FamilyCardController extends Controller
 
         try {
             $validator = Validator::make($request->all(), [
-                'family_card_number'    => 'required|string',
-                'head_of_family_name'   => 'required|string',
-                'address'               => 'required|string',
+                'family_card_number'    => 'required|string|min:10|max:20|regex:/^[0-9]+$/|unique:family_cards',
+                'head_of_family_name'   => 'required|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'address'               => 'required|string|min:3|max:255',
                 'publication_date'      => 'required|date',
-                'region_id'             => 'required|numeric',
+                'region_id'             => 'required|integer|min:1|exists:regions,id',
             ]);
 
             if ($validator->fails()) {
@@ -243,9 +244,30 @@ class FamilyCardController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(int $id, RegionServiceClient $regionServiceClient): JsonResponse
+    public function show($id, RegionServiceClient $regionServiceClient): JsonResponse
     {
         try {
+            // Validasi bahwa id harus angka
+            if (!is_numeric($id) || !ctype_digit((string)$id)) {
+                return ApiResponse::error(
+                    'Invalid ID format',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                );
+            }
+
+            // Konversi ke integer
+            $id = (int)$id;
+
+            // Validasi bahwa id harus positif
+            if ($id <= 0) {
+                return ApiResponse::error(
+                    'Invalid ID',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                );
+            }
+
             $familyCard = FamilyCard::with(['familyMembers.resident'])->find($id);
 
             if (!$familyCard) {
@@ -340,18 +362,44 @@ class FamilyCardController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateFamilyCardRequest $request, FamilyCard $familyCard): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         DB::beginTransaction();
 
         try {
+            // Validasi ID
+            $validation = $this->validateAndConvertId($id);
+            if (!$validation['success']) {
+                return $validation['error'];
+            }
+
+            $id = $validation['id'];
+
+            $familyCard = FamilyCard::find($id);
+
+            if (!$familyCard) {
+                return ApiResponse::error(
+                    'Family card not found',
+                    null,
+                    404
+                );
+            }
+
             $validator = Validator::make($request->all(), [
-                'family_card_number'   => 'sometimes|string',
-                'head_of_family_name'   => 'sometimes|string',
-                'address'               => 'sometimes|string',
+                'family_card_number'    => [
+                    'sometimes',
+                    'string',
+                    'min:10',
+                    'max:20',
+                    'regex:/^[0-9]+$/',
+                    Rule::unique('family_cards')->ignore($familyCard->id)
+                ],
+                'head_of_family_name'   => 'sometimes|string|min:3|max:255|regex:/^[\pL\s.]+$/u',
+                'address'               => 'sometimes|string|min:3|max:255',
                 'publication_date'      => 'sometimes|date',
-                'region_id'             => 'sometimes|numeric',
+                'region_id'             => 'sometimes|integer|min:1|exists:regions,id',
             ]);
+
 
             if ($validator->fails()) {
                 return ApiResponse::error('Validation failed.', $validator->errors());
@@ -398,11 +446,30 @@ class FamilyCardController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(FamilyCard $familyCard): JsonResponse
+    public function destroy($id): JsonResponse
     {
         DB::beginTransaction();
 
         try {
+            // Validasi ID
+            $validation = $this->validateAndConvertId($id);
+            if (!$validation['success']) {
+                return $validation['error'];
+            }
+
+            $id = $validation['id'];
+
+            $familyCard = FamilyCard::find($id);
+
+            if (!$familyCard) {
+                return ApiResponse::error(
+                    'Family card not found',
+                    null,
+                    404
+                );
+            }
+
+
             // Cek apakah ada anggota keluarga
             if ($familyCard->familyMembers()->count() > 0) {
                 return response()->json([
@@ -431,6 +498,38 @@ class FamilyCardController extends Controller
                 500
             );
         }
+    }
+
+    private function validateAndConvertId($id): array
+    {
+        if (!is_numeric($id)) {
+            return [
+                'success' => false,
+                'error' => ApiResponse::error(
+                    'Invalid ID format',
+                    ['id' => 'The ID must be a numeric value.'],
+                    422
+                )
+            ];
+        }
+
+        $id = (int)$id;
+
+        if ($id <= 0) {
+            return [
+                'success' => false,
+                'error' => ApiResponse::error(
+                    'Invalid ID',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                )
+            ];
+        }
+
+        return [
+            'success' => true,
+            'id' => $id
+        ];
     }
 
     /**

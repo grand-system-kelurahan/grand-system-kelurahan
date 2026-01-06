@@ -85,11 +85,30 @@ class FamilyMemberController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreFamilyMemberRequest $request, FamilyCard $familyCard): JsonResponse
+    public function store(StoreFamilyMemberRequest $request, $id): JsonResponse
     {
         DB::beginTransaction();
 
         try {
+            // Validasi ID
+            $validation = $this->validateAndConvertId($id);
+            if (!$validation['success']) {
+                return $validation['error'];
+            }
+
+            $id = $validation['id'];
+
+            $familyCard = FamilyCard::find($id);
+
+            if (!$familyCard) {
+                return ApiResponse::error(
+                    'Family card not found',
+                    null,
+                    404
+                );
+            }
+
+
             $data = $request->validated();
 
 
@@ -183,18 +202,70 @@ class FamilyMemberController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateFamilyMemberRequest $request, FamilyCard $familyCard, FamilyMember $familyMember): JsonResponse
+    public function update(UpdateFamilyMemberRequest $request, $familyCardId, $familyMemberId): JsonResponse
     {
         DB::beginTransaction();
 
         try {
-            // Validasi 1: Pastikan family member milik family card yang benar
+            // VALIDASI ID: Family Card ID harus berupa angka positif
+            if (!is_numeric($familyCardId) || (int)$familyCardId <= 0) {
+                return ApiResponse::error(
+                    'Invalid family card ID format',
+                    ['family_card_id' => 'The family card ID must be a positive integer.'],
+                    422
+                );
+            }
+
+            // VALIDASI ID: Family Member ID harus berupa angka positif
+            if (!is_numeric($familyMemberId) || (int)$familyMemberId <= 0) {
+                return ApiResponse::error(
+                    'Invalid family member ID format',
+                    ['family_member_id' => 'The family member ID must be a positive integer.'],
+                    422
+                );
+            }
+
+            // Konversi ke integer
+            $familyCardId = (int)$familyCardId;
+            $familyMemberId = (int)$familyMemberId;
+
+            // Validasi 1: Pastikan family card benar-benar ada di database
+            $familyCard = FamilyCard::find($familyCardId);
+            if (!$familyCard) {
+                return ApiResponse::error(
+                    'Family card not found',
+                    ['family_card_id' => 'Family card with ID ' . $familyCardId . ' not found.'],
+                    404
+                );
+            }
+
+            // Validasi 2: Pastikan family member benar-benar ada di database
+            $familyMember = FamilyMember::find($familyMemberId);
+            if (!$familyMember) {
+                return ApiResponse::error(
+                    'Family member not found',
+                    ['family_member_id' => 'Family member with ID ' . $familyMemberId . ' not found.'],
+                    404
+                );
+            }
+
+            // Validasi 3: Pastikan family member milik family card yang benar
             if ($familyMember->family_card_id != $familyCard->id) {
-                return ApiResponse::success(
-                    'Family member not found in this family card',
+                return ApiResponse::error(
+                    'Family member does not belong to this family card',
                     [
                         'requested_family_card_id' => $familyCard->id,
-                        'member_family_card_id' => $familyMember->family_card_id
+                        'member_family_card_id' => $familyMember->family_card_id,
+                        'family_card_info' => [
+                            'requested' => [
+                                'id' => $familyCard->id,
+                                'head_of_family' => $familyCard->head_of_family_name
+                            ],
+                            'actual' => [
+                                'id' => $familyMember->family_card_id,
+                                'head_of_family' => $familyMember->familyCard->head_of_family_name ?? 'Unknown'
+                            ]
+                        ]
                     ],
                     404
                 );
@@ -202,7 +273,7 @@ class FamilyMemberController extends Controller
 
             $data = $request->validated();
 
-            // Validasi 2: Jika mengubah relationship menjadi "Kepala Keluarga"
+            // Validasi 4: Jika mengubah relationship menjadi "Kepala Keluarga"
             if (isset($data['relationship']) && strtolower($data['relationship']) === 'kepala keluarga') {
                 // Cek apakah sudah ada kepala keluarga lain di keluarga ini
                 $existingHead = FamilyMember::where('family_card_id', $familyCard->id)
@@ -211,13 +282,18 @@ class FamilyMemberController extends Controller
                     ->first();
 
                 if ($existingHead) {
-                    return ApiResponse::success(
-                        'There is already a head of family in this family card',
+                    return ApiResponse::error(
+                        'Cannot have multiple head of family',
                         [
                             'current_head_of_family' => [
                                 'id' => $existingHead->id,
-                                'resident_name' => $existingHead->resident->name ?? 'Tidak diketahui',
-                                'resident_id' => $existingHead->resident_id
+                                'resident_id' => $existingHead->resident_id,
+                                'resident_name' => $existingHead->resident->name ?? 'Unknown',
+                                'member_since' => $existingHead->created_at
+                            ],
+                            'attempted_change' => [
+                                'member_id' => $familyMember->id,
+                                'resident_name' => $familyMember->resident->name ?? 'Unknown'
                             ]
                         ],
                         422
@@ -225,55 +301,92 @@ class FamilyMemberController extends Controller
                 }
             }
 
-            // Validasi 3: Jika mengubah resident_id
-            if (isset($data['resident_id']) && $data['resident_id'] != $familyMember->resident_id) {
-                // Cek apakah resident baru ada
-                $newResident = Resident::find($data['resident_id']);
-                if (!$newResident) {
-                    return ApiResponse::success(
-                        'Resident not found',
-                        null,
-                        404
-                    );
-                }
+            // Validasi 5: Jika ada resident_id dalam request
+            if (isset($data['resident_id'])) {
+                $newResidentId = (int)$data['resident_id'];
 
-                // Cek apakah resident baru sudah menjadi anggota keluarga lain
-                $existingMember = FamilyMember::where('resident_id', $data['resident_id'])
-                    ->where('id', '!=', $familyMember->id)
-                    ->first();
-
-                if ($existingMember) {
-                    return ApiResponse::success(
-                        'Resident is already a member of another family card',
-                        [
-                            'existing_family_card' => [
-                                'id' => $existingMember->family_card_id,
-                                'head_of_family' => $existingMember->familyCard->head_of_family_name ?? 'Tidak diketahui'
-                            ]
-                        ],
+                // Validasi format resident ID
+                if ($newResidentId <= 0) {
+                    return ApiResponse::error(
+                        'Invalid resident ID',
+                        ['resident_id' => 'The resident ID must be a positive integer.'],
                         422
                     );
                 }
 
-                // Cek apakah resident baru sudah ada di keluarga yang sama (jika pindah resident)
-                $alreadyInSameFamily = FamilyMember::where('family_card_id', $familyCard->id)
-                    ->where('resident_id', $data['resident_id'])
-                    ->where('id', '!=', $familyMember->id)
-                    ->exists();
+                // Hanya validasi duplikasi jika resident_id BERBEDA dengan yang sekarang
+                if ($newResidentId != $familyMember->resident_id) {
+                    // Cek apakah resident baru ada
+                    $newResident = Resident::find($newResidentId);
+                    if (!$newResident) {
+                        return ApiResponse::error(
+                            'Resident not found',
+                            ['resident_id' => 'Resident with ID ' . $newResidentId . ' not found.'],
+                            404
+                        );
+                    }
 
-                if ($alreadyInSameFamily) {
-                    return ApiResponse::success(
-                        'Resident is already a member of this family card',
-                        null,
-                        422
-                    );
+                    // Cek apakah resident baru sudah menjadi anggota keluarga lain
+                    $existingMember = FamilyMember::where('resident_id', $newResidentId)
+                        ->where('id', '!=', $familyMember->id)
+                        ->first();
+
+                    if ($existingMember) {
+                        return ApiResponse::error(
+                            'Cannot assign resident to this family member',
+                            [
+                                'error' => 'Resident is already a member of another family',
+                                'resident_info' => [
+                                    'id' => $newResidentId,
+                                    'name' => $newResident->name,
+                                    'nik' => $newResident->national_number_id ?? 'N/A'
+                                ],
+                                'existing_family' => [
+                                    'family_card_id' => $existingMember->family_card_id,
+                                    'family_card_number' => $existingMember->familyCard->family_card_number ?? 'N/A',
+                                    'head_of_family' => $existingMember->familyCard->head_of_family_name ?? 'Unknown',
+                                    'member_relationship' => $existingMember->relationship,
+                                    'member_since' => $existingMember->created_at
+                                ],
+                                'suggestion' => 'If you want to move this resident, first remove them from the other family'
+                            ],
+                            422
+                        );
+                    }
+
+                    // Cek apakah resident baru sudah ada di keluarga yang sama
+                    $alreadyInSameFamily = FamilyMember::where('family_card_id', $familyCard->id)
+                        ->where('resident_id', $newResidentId)
+                        ->where('id', '!=', $familyMember->id)
+                        ->exists();
+
+                    if ($alreadyInSameFamily) {
+                        return ApiResponse::error(
+                            'Cannot assign resident to this family member',
+                            [
+                                'error' => 'Resident is already a member of this family card',
+                                'resident_info' => [
+                                    'id' => $newResidentId,
+                                    'name' => $newResident->name
+                                ],
+                                'family_info' => [
+                                    'id' => $familyCard->id,
+                                    'family_card_number' => $familyCard->family_card_number,
+                                    'head_of_family' => $familyCard->head_of_family_name
+                                ],
+                                'suggestion' => 'No need to create duplicate entry for the same resident'
+                            ],
+                            422
+                        );
+                    }
                 }
+                // Jika resident_id sama dengan yang sekarang, lanjutkan tanpa validasi duplikasi
             }
 
             // Simpan data lama untuk logging/response
             $oldData = [
                 'resident_id' => $familyMember->resident_id,
-                'resident_name' => $familyMember->resident->name ?? 'Tidak diketahui',
+                'resident_name' => $familyMember->resident->name ?? 'Unknown',
                 'relationship' => $familyMember->relationship,
                 'updated_at' => $familyMember->updated_at
             ];
@@ -294,20 +407,25 @@ class FamilyMemberController extends Controller
                         'old_data' => $oldData,
                         'new_data' => [
                             'resident_id' => $updatedMember->resident_id,
-                            'resident_name' => $updatedMember->resident->name ?? 'Tidak diketahui',
+                            'resident_name' => $updatedMember->resident->name ?? 'Unknown',
                             'relationship' => $updatedMember->relationship
                         ],
-                        'changed_fields' => array_keys($data)
+                        'changed_fields' => array_keys($data),
+                        'resident_changed' => isset($data['resident_id']) && $data['resident_id'] != $oldData['resident_id']
                     ],
                     'family_info' => [
                         'id' => $familyCard->id,
+                        'family_card_number' => $familyCard->family_card_number,
                         'head_of_family' => $familyCard->head_of_family_name,
                         'total_members' => $familyCard->familyMembers()->count(),
                         'head_of_family_exists' => $familyCard->familyMembers()
                             ->where('relationship', 'Kepala Keluarga')
-                            ->exists()
+                            ->exists(),
+                        'head_of_family_name' => $familyCard->familyMembers()
+                            ->where('relationship', 'Kepala Keluarga')
+                            ->first()->resident->name ?? 'Not set'
                     ]
-                ],
+                ]
             );
         } catch (\Exception $e) {
             DB::rollBack();
@@ -323,18 +441,70 @@ class FamilyMemberController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(FamilyCard $familyCard, FamilyMember $familyMember): JsonResponse
+    public function destroy($familyCardId, $familyMemberId): JsonResponse
     {
         DB::beginTransaction();
 
         try {
-            // Validasi: pastikan familyMember benar-benar milik familyCard ini
-            if ($familyMember->family_card_id !== $familyCard->id) {
-                return ApiResponse::success(
-                    'Family member not found in this family card',
+            // VALIDASI ID: Family Card ID harus berupa angka positif
+            if (!is_numeric($familyCardId) || (int)$familyCardId <= 0) {
+                return ApiResponse::error(
+                    'Invalid family card ID format',
+                    ['family_card_id' => 'The family card ID must be a positive integer.'],
+                    422
+                );
+            }
+
+            // VALIDASI ID: Family Member ID harus berupa angka positif
+            if (!is_numeric($familyMemberId) || (int)$familyMemberId <= 0) {
+                return ApiResponse::error(
+                    'Invalid family member ID format',
+                    ['family_member_id' => 'The family member ID must be a positive integer.'],
+                    422
+                );
+            }
+
+            // Konversi ke integer
+            $familyCardId = (int)$familyCardId;
+            $familyMemberId = (int)$familyMemberId;
+
+            // Validasi 1: Pastikan family card benar-benar ada di database
+            $familyCard = FamilyCard::find($familyCardId);
+            if (!$familyCard) {
+                return ApiResponse::error(
+                    'Family card not found',
+                    ['family_card_id' => 'Family card with ID ' . $familyCardId . ' not found.'],
+                    404
+                );
+            }
+
+            // Validasi 2: Pastikan family member benar-benar ada di database
+            $familyMember = FamilyMember::find($familyMemberId);
+            if (!$familyMember) {
+                return ApiResponse::error(
+                    'Family member not found',
+                    ['family_member_id' => 'Family member with ID ' . $familyMemberId . ' not found.'],
+                    404
+                );
+            }
+
+            // Validasi 3: Pastikan family member milik family card yang benar
+            if ($familyMember->family_card_id != $familyCard->id) {
+                return ApiResponse::error(
+                    'Family member does not belong to this family card',
                     [
                         'requested_family_card_id' => $familyCard->id,
-                        'member_family_card_id' => $familyMember->family_card_id
+                        'member_family_card_id' => $familyMember->family_card_id,
+                        'family_card_info' => [
+                            'requested' => [
+                                'id' => $familyCard->id,
+                                'head_of_family' => $familyCard->head_of_family_name
+                            ],
+                            'actual' => [
+                                'id' => $familyMember->family_card_id,
+                                'head_of_family' => $familyMember->familyCard->head_of_family_name ?? 'Unknown'
+                            ]
+                        ]
                     ],
                     404
                 );
@@ -376,6 +546,38 @@ class FamilyMemberController extends Controller
                 500
             );
         }
+    }
+
+    private function validateAndConvertId($id): array
+    {
+        if (!is_numeric($id)) {
+            return [
+                'success' => false,
+                'error' => ApiResponse::error(
+                    'Invalid ID format',
+                    ['id' => 'The ID must be a numeric value.'],
+                    422
+                )
+            ];
+        }
+
+        $id = (int)$id;
+
+        if ($id <= 0) {
+            return [
+                'success' => false,
+                'error' => ApiResponse::error(
+                    'Invalid ID',
+                    ['id' => 'The ID must be a positive integer.'],
+                    422
+                )
+            ];
+        }
+
+        return [
+            'success' => true,
+            'id' => $id
+        ];
     }
 
     /**

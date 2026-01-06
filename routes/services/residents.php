@@ -15,8 +15,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::apiResource('family-cards', FamilyCardController::class);
 
     Route::post('/family-cards/{familyCard}/members', [FamilyMemberController::class, 'store']);
-    Route::delete('/family-cards/{familyCard}/members/{familyMember}', [FamilyMemberController::class, 'destroy']);
-    Route::put('/family-cards/{familyCard}/members/{familyMember}', [FamilyMemberController::class, 'update']);
+    Route::put('/family-cards/{familyCardId}/members/{familyMemberId}', [FamilyMemberController::class, 'update']);
+    Route::delete('/family-cards/{familyCardId}/members/{familyMemberId}', [FamilyMemberController::class, 'destroy']);
 
     Route::prefix('resident-verifications')->group(function () {
         Route::get('/', [ResidentVerificationController::class, 'index']);
